@@ -195,6 +195,13 @@
   .mini-toggle input:checked + .mt-track .mt-knob{left:14px;background:var(--night)}
 
   .cheers{margin-top:22px;padding-top:18px;border-top:1px solid var(--line)}
+  .atmos{margin-top:22px;padding-top:18px;border-top:1px solid var(--line)}
+  .env-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px 22px;margin-top:14px}
+  @media (max-width:560px){ .env-grid{grid-template-columns:1fr} }
+  .env-top{display:flex;justify-content:space-between;align-items:baseline;font-size:12px;color:var(--ink);margin-bottom:4px}
+  .env-v{font-family:'Archivo Expanded',sans-serif;font-weight:600;font-size:12px;color:var(--glow)}
+  .env input[type=range]{width:100%}
+  .env-note{font-size:11px;color:var(--ink-dim);margin-top:14px;line-height:1.5}
   .cheer-add{display:flex;gap:7px;margin-bottom:12px;flex-wrap:wrap}
   .cheer-add select,.cheer-add input[type=text]{
     font-family:'Spline Sans Mono';font-size:12px;padding:9px 10px;border-radius:7px;
@@ -407,6 +414,61 @@
       </div>
     </div>
 
+    <div class="atmos">
+      <div class="rig-head">Atmosphere — the air the sound travels through</div>
+
+      <div class="env-grid">
+        <div class="env">
+          <div class="env-top"><span>Air / clarity</span><span class="env-v" id="clarityV">0</span></div>
+          <input type="range" id="clarity" min="-100" max="100" value="0" step="1">
+          <div class="scale"><span>underwater</span><span>crisp & open</span></div>
+        </div>
+
+        <div class="env">
+          <div class="env-top"><span>Temperature</span><span class="env-v" id="tempV">20°C</span></div>
+          <input type="range" id="temp" min="-10" max="40" value="20" step="1">
+          <div class="scale"><span>−10°C</span><span>40°C</span></div>
+        </div>
+
+        <div class="env">
+          <div class="env-top"><span>Humidity</span><span class="env-v" id="humV">50%</span></div>
+          <input type="range" id="hum" min="0" max="100" value="50" step="1">
+          <div class="scale"><span>dry · crisp highs gone faster</span><span>humid · highs carry</span></div>
+        </div>
+
+        <div class="env">
+          <div class="env-top"><span>Air pressure</span><span class="env-v" id="presV">1013 hPa</span></div>
+          <input type="range" id="pres" min="850" max="1050" value="1013" step="1">
+          <div class="scale"><span>850 · high altitude</span><span>1050 · sea level</span></div>
+        </div>
+
+        <div class="env">
+          <div class="env-top"><span>Crowd density</span><span class="env-v" id="densV">50%</span></div>
+          <input type="range" id="dens" min="0" max="100" value="50" step="1">
+          <div class="scale"><span>empty field</span><span>packed · deeper notch</span></div>
+        </div>
+
+        <div class="env">
+          <div class="env-top"><span>Wind speed</span><span class="env-v" id="windV">0 m/s</span></div>
+          <input type="range" id="wind" min="0" max="20" value="0" step="0.5">
+          <div class="scale"><span>still</span><span>20 m/s · gale</span></div>
+        </div>
+
+        <div class="env">
+          <div class="env-top"><span>Wind direction</span><span class="env-v" id="windDirV">downwind</span></div>
+          <input type="range" id="windDir" min="0" max="180" value="0" step="5">
+          <div class="scale"><span>downwind · louder</span><span>upwind · shadow</span></div>
+        </div>
+
+        <div class="env">
+          <div class="env-top"><span>Gusts / turbulence</span><span class="env-v" id="gustV">0%</span></div>
+          <input type="range" id="gust" min="0" max="100" value="0" step="1">
+          <div class="scale"><span>steady</span><span>gusty · wandering</span></div>
+        </div>
+      </div>
+      <div class="env-note" id="envNote">Still, mild air. Move the controls to reshape how the field carries the sound.</div>
+    </div>
+
     <div class="markers hidden" id="markersPanel">
       <div class="rig-head">WAV markers — found in the track</div>
       <div class="marker-strip" id="markerStrip"></div>
@@ -471,6 +533,17 @@ let paLevel=100, tuneId='flat';
 let drumBoost=0, crowdBoostDb=0;  // dB; drum = source kick/punch EQ, crowd = crowd-layer gain
 let drumOn=true;                  // drum boost on/off
 let eqGains=[0,0,0,0,0];           // input 5-band EQ gains (dB)
+// environmental / atmospheric controls (physically grounded)
+let envClarity   = 0;     // -100..100 : air/clarity tilt (fixes 'underwater')
+let envTemp      = 20;    // deg C
+let envHumidity  = 50;    // % relative humidity
+let envPressure  = 1013;  // hPa (sea level ~1013)
+let envDensity   = 50;    // crowd density 0..100 %
+let envWindSpeed = 0;     // m/s
+let envWindDir   = 0;     // degrees: 0 = downwind (toward listener), 180 = upwind
+let envGust      = 0;     // 0..100 % turbulence
+let gustPhase    = 0;     // running phase for gust modulation
+let gustTimer    = null;  // interval that animates gusts during preview
 let inAnalyser=null, outAnalyser=null, visualRAF=null; // waveform + particle analysers
 const EQ_FREQS=[80,250,1000,4000,10000];
 const EQ_TYPES=['lowshelf','peaking','peaking','peaking','highshelf'];
@@ -632,26 +705,70 @@ function synthCheer(c, kind){
 function paramsFor(d){
   d = Math.max(1, d);
   const n = Math.min(1, Math.log10(d/2)/Math.log10(400)); // 0 at 2m, ~1 at 800m
-  // Atmospheric absorption ~ freq^2 (~5 dB/100m at 8kHz, dry). Effective lowpass
-  // corner = frequency where cumulative absorption hits ~8 dB over distance d.
-  const lp = Math.min(20000, Math.max(250,
-             8000 * Math.sqrt(8 / Math.max(1, (5/100)*d))));
+
+  // ---- atmospheric absorption, modulated by weather ----
+  // Base air absorption ~ f^2 (~5 dB/100m at 8kHz, dry, 20C). Humidity LOWERS
+  // HF absorption (humid air absorbs less high end); cold air absorbs a touch
+  // more. Pressure/altitude: thinner air (low hPa) absorbs slightly less but
+  // also carries slightly less level.
+  const humF   = 1 - (envHumidity-50)/100*0.6;   // 50%RH neutral; humid -> less absorption
+  const tempF  = 1 + (20-envTemp)/100;           // colder -> a bit more absorption
+  const absK   = (5/100) * humF * tempF;          // dB/m at 8kHz, weather-adjusted
+
+  // clarity tilt: + opens highs / shallower filtering, - muffles ('underwater')
+  const clar   = envClarity/100;                  // -1..1
+  const lpScale = Math.pow(2, clar*1.4);          // up to ~2.6x cutoff when bright
+  let lp = Math.min(20000, Math.max(180,
+           8000 * Math.sqrt(8 / Math.max(1, absK*d)) * lpScale));
+
+  // ---- ground / crowd effect: density drives notch depth + HF scatter ----
+  const dens   = envDensity/100;                  // 0..1
+  const gN     = Math.min(1, Math.max(0,(d-8)/200));
+  const notchDepth = -(5 + 7*dens) * gN * (1 - clar*0.5); // denser crowd = deeper dip
+  const scatter    = -(2 + 6*dens) * n;           // HF scatter grows with density+dist
+
+  // ---- wind: downwind brightens & lifts, upwind = shadow zone (refraction) ----
+  // windDir 0deg = blowing toward listener (downwind), 180 = away (upwind).
+  const windComp = Math.cos(envWindDir*Math.PI/180);    // +1 downwind .. -1 upwind
+  const windMag  = envWindSpeed;                        // m/s
+  // level effect grows with distance (~0.8 dB per m/s per ~150m), capped near +/-20dB
+  const windDb   = Math.max(-20, Math.min(8,
+                   windComp * windMag * (d/150) * 0.8));
+  // upwind also dulls highs (shadow zone loses HF); downwind opens them slightly
+  const windLp   = windComp>=0 ? (1 + windComp*0.15*Math.min(1,windMag/10))
+                               : (1 + windComp*0.4*Math.min(1,windMag/10)); // <1 upwind
+  lp = Math.min(20000, Math.max(150, lp*windLp));
+
+  // ---- gust/turbulence: time-varying wobble in level + cutoff ----
+  // gustPhase advances in liveUpdate(); here we sample it for a smooth wander.
+  const gust = envGust/100;
+  const gustLvl = gust * 2.5 * Math.sin(gustPhase*1.3) * Math.min(1,windMag/4); // dB
+  const gustLp  = 1 + gust*0.15*Math.sin(gustPhase*0.7);
+
+  // ---- pressure / density of air ----
+  const presF = envPressure/1013;                 // ~1 at sea level
+  const presDb = (presF-1)*6;                      // thinner air slightly quieter
+
+  // ---- HF shelf: residual air absorption + crowd scatter + wind, tilt-able ----
+  const hsBase = -(absK*d)*1.2;
+  const highshelf = Math.max(-30, (hsBase + scatter)*(1-clar*0.6) + (windComp>=0?windComp*windMag*0.2:0));
+
+  // ---- geometric spreading (line->point) + PA + weather level terms ----
+  const spreadDb = -(3 + 3*Math.min(1,Math.max(0,(d-120)/700))) * Math.log2(Math.max(d,4)/4);
+  const gain = Math.pow(10, (spreadDb + windDb + gustLvl + presDb)/20)
+             * Math.pow(10, (paLevel-100)/40);
+
   return {
-    lowpass: lp,
-    highshelf: Math.max(-26, -(5/100)*d*1.2),  // residual air + crowd scatter
+    lowpass: lp*gustLp,
+    highshelf,
     highshelfFreq: 3500,
-    bassGain: 7 * n,             // lows survive (barely absorbed, ground coupled)
+    bassGain: 7 * n,
     bassFreq: 90,
-    // ground-effect dip over the crowd (200-600Hz, deepens with grazing range)
-    groundFreq: 500 - 200*Math.min(1, Math.max(0,(d-8)/200)),
-    groundGain: -9 * Math.min(1, Math.max(0,(d-8)/200)),
-    wet: Math.min(0.7, 0.10 + 0.65*n),
-    // Geometric spreading: line-source 3 dB/doubling near field, steepening to
-    // point-source 6 dB/doubling far field (festival line-array behaviour).
-    gain: Math.pow(10, ( -(3 + 3*Math.min(1,Math.max(0,(d-120)/700)))
-                         * Math.log2(Math.max(d,4)/4) )/20)
-          * Math.pow(10, (paLevel-100)/40), // PA drive
-    crowd: Math.min(0.35, 0.04 + 0.4*n),
+    groundFreq: 500 - 200*gN,
+    groundGain: notchDepth,
+    wet: Math.min(0.78, 0.10 + 0.65*n + dens*0.08),  // denser crowd = a bit more diffuse
+    gain,
+    crowd: Math.min(0.45, 0.04 + 0.4*n + dens*0.12),
     predelay: Math.min(0.09, d/3430)
   };
 }
@@ -861,6 +978,8 @@ function startPreview(){
   regionNodes=scheduleCrowdRegions(ctx, chain, previewStart); // crowd across start/end spans
   playing=true; els.play.textContent='■ Stop';
   startVisuals();
+  if(gustTimer) clearInterval(gustTimer);
+  gustTimer=setInterval(()=>{ if(playing && (envGust>0)) liveUpdate(); }, 90);
   srcNode.onended=()=>{};
 }
 function stopPreview(){
@@ -870,6 +989,7 @@ function stopPreview(){
   regionNodes.forEach(n=>{try{n.stop()}catch(e){}});
   cheerNodes=[]; regionNodes=[];
   playing=false; els.play.textContent='▶ Preview';
+  if(gustTimer){ clearInterval(gustTimer); gustTimer=null; }
   stopVisuals();
 }
 
@@ -1039,6 +1159,7 @@ function stopVisuals(){
 /* live param update without restarting */
 function liveUpdate(){
   if(!playing||!chain) return;
+  gustPhase += 0.08;  // advance turbulence wander
   const p=paramsFor(+els.dist.value), t=ctx.currentTime, g=0.08;
   chain.lp.frequency.linearRampToValueAtTime(p.lowpass,t+g);
   chain.lp2.frequency.linearRampToValueAtTime(p.lowpass,t+g);
@@ -1512,7 +1633,47 @@ for(let i=0;i<5;i++){
   slot.addEventListener('dblclick',()=>{ eqGains[i]=0; renderEq(slot,i); liveUpdate(); });
   renderEq(slot,i); // initial
 }
-// crowd boost — live on the constant bed; rebuild on release so regions update too
+
+// ---- environmental / atmosphere controls ----
+function windDirLabel(deg){
+  if(deg<=20) return 'downwind';
+  if(deg<=70) return 'cross-down';
+  if(deg<110) return 'crosswind';
+  if(deg<160) return 'cross-up';
+  return 'upwind';
+}
+function updateEnvNote(){
+  const bits=[];
+  bits.push(envWindSpeed<0.5 ? 'Still air' :
+            (Math.cos(envWindDir*Math.PI/180)>=0?'Downwind':'Upwind')+` ~${envWindSpeed} m/s`);
+  bits.push(envHumidity<35?'dry':envHumidity>70?'humid':'mild');
+  bits.push(envTemp<5?'cold':envTemp>28?'hot':`${envTemp}°C`);
+  if(envDensity>70) bits.push('packed crowd');
+  else if(envDensity<25) bits.push('sparse crowd');
+  if(envGust>40) bits.push('gusty');
+  const el=document.getElementById('envNote');
+  if(el) el.textContent = bits.join(' · ') + '. The filtering and level shift to match.';
+}
+function bindEnv(id, fn, fmt){
+  const sl=document.getElementById(id), vl=document.getElementById(id+'V');
+  if(!sl) return;
+  sl.addEventListener('input',()=>{
+    fn(+sl.value);
+    if(vl&&fmt) vl.textContent=fmt(+sl.value);
+    updateEnvNote();
+    liveUpdate();
+  });
+}
+bindEnv('clarity', v=>envClarity=v,  v=> (v>0?'+':'')+v );
+bindEnv('temp',    v=>envTemp=v,     v=> v+'°C' );
+bindEnv('hum',     v=>envHumidity=v, v=> v+'%' );
+bindEnv('pres',    v=>envPressure=v, v=> v+' hPa' );
+bindEnv('dens',    v=>envDensity=v,  v=> v+'%' );
+bindEnv('wind',    v=>envWindSpeed=v,v=> v+' m/s' );
+bindEnv('windDir', v=>envWindDir=v,  v=> windDirLabel(v) );
+bindEnv('gust',    v=>envGust=v,     v=> v+'%' );
+updateEnvNote();
+
 els.crowdBoost.addEventListener('input',()=>{
   crowdBoostDb=+els.crowdBoost.value;
   els.crowdBoostVal.textContent=`${crowdBoostDb>0?'+':''}${crowdBoostDb} dB`;

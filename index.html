@@ -27,8 +27,24 @@
     min-height:100vh;
     display:flex;align-items:center;justify-content:center;
     padding:32px 18px;
+    position:relative;overflow-x:hidden;
   }
-  .panel{width:100%;max-width:560px}
+  /* full-bleed energy-reactive particle canvas behind everything */
+  #particles{position:fixed;inset:0;width:100vw;height:100vh;z-index:0;pointer-events:none}
+  .panel{width:100%;max-width:min(560px, 92vw);position:relative;z-index:1}
+  /* scale type to viewport so it feels proportional on big/small screens */
+  @media (min-width:900px){ .panel{max-width:620px} }
+  @media (min-width:1400px){ .panel{max-width:680px} }
+
+  /* vertical scrolling waveform columns flanking the panel, full viewport height */
+  .wavecol{position:fixed;top:0;bottom:0;width:clamp(48px,7vw,110px);z-index:1;
+    display:flex;flex-direction:column;align-items:center;background:#0a0e14;
+    border-right:1px solid var(--line);border-left:1px solid var(--line)}
+  .wavecol.left{left:0;border-left:none}
+  .wavecol.right{right:0;border-right:none}
+  .wavecol canvas{flex:1;width:100%;display:block;min-height:0}
+  /* hide the flanking columns on narrow screens where they'd crowd the panel */
+  @media (max-width:760px){ .wavecol{display:none} }
   .eyebrow{
     font-size:11px;letter-spacing:.35em;text-transform:uppercase;
     color:var(--ink-dim);margin-bottom:14px;
@@ -42,9 +58,13 @@
   .sub{color:var(--ink-dim);font-size:13px;max-width:42ch;margin-bottom:30px;line-height:1.5}
 
   .card{
-    background:linear-gradient(180deg,var(--night2),var(--haze));
-    border:1px solid var(--line);border-radius:14px;
+    background:linear-gradient(180deg, rgba(31,39,51,.55), rgba(22,27,34,.45));
+    backdrop-filter:blur(16px) saturate(140%);
+    -webkit-backdrop-filter:blur(16px) saturate(140%);
+    border:1px solid rgba(255,255,255,.08);
+    border-radius:14px;
     padding:22px;margin-bottom:16px;
+    box-shadow:0 8px 32px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.06);
   }
   .drop{
     display:block;
@@ -244,6 +264,9 @@
 </style>
 </head>
 <body>
+<canvas id="particles"></canvas>
+<div class="wavecol left" id="wavecolIn"><canvas id="waveIn"></canvas></div>
+<div class="wavecol right" id="wavecolOut"><canvas id="waveOut"></canvas></div>
 <div class="panel">
   <div class="eyebrow">Acoustic Distance Renderer</div>
   <h1>Field<span>.</span></h1>
@@ -448,6 +471,7 @@ let paLevel=100, tuneId='flat';
 let drumBoost=0, crowdBoostDb=0;  // dB; drum = source kick/punch EQ, crowd = crowd-layer gain
 let drumOn=true;                  // drum boost on/off
 let eqGains=[0,0,0,0,0];           // input 5-band EQ gains (dB)
+let inAnalyser=null, outAnalyser=null, visualRAF=null; // waveform + particle analysers
 const EQ_FREQS=[80,250,1000,4000,10000];
 const EQ_TYPES=['lowshelf','peaking','peaking','peaking','highshelf'];
 let crowdBeds=[];     // {id, name, buffer}
@@ -823,7 +847,12 @@ function startPreview(){
   srcNode.buffer=audioBuf; srcNode.loop=true;
   const p=paramsFor(+els.dist.value);
   chain=buildChain(ctx,p,true);
+  // analyser taps: input (pre-processing) and output (post-processing)
+  inAnalyser=ctx.createAnalyser();  inAnalyser.fftSize=1024;
+  outAnalyser=ctx.createAnalyser(); outAnalyser.fftSize=1024;
+  srcNode.connect(inAnalyser);      // tap the dry source
   srcNode.connect(chain.input);
+  chain.out.connect(outAnalyser);   // tap the processed output
   chain.out.connect(ctx.destination);
   previewStart=ctx.currentTime+0.06;
   srcNode.start(previewStart);
@@ -831,6 +860,7 @@ function startPreview(){
   cheerNodes=scheduleCheers(ctx, chain, previewStart); // fire each at its timestamp (first pass)
   regionNodes=scheduleCrowdRegions(ctx, chain, previewStart); // crowd across start/end spans
   playing=true; els.play.textContent='■ Stop';
+  startVisuals();
   srcNode.onended=()=>{};
 }
 function stopPreview(){
@@ -840,6 +870,170 @@ function stopPreview(){
   regionNodes.forEach(n=>{try{n.stop()}catch(e){}});
   cheerNodes=[]; regionNodes=[];
   playing=false; els.play.textContent='▶ Preview';
+  stopVisuals();
+}
+
+/* ---------- visuals: input-energy particles + vertical heatmap waveforms ---------- */
+const particles=[];
+let pcanvas, pctx, waveInCtx, waveOutCtx, waveInBuf, waveOutBuf;
+let energyAvg=0, energyAvgO=0;
+
+function resizeVisualCanvases(){
+  pcanvas=document.getElementById('particles');
+  if(pcanvas){
+    pcanvas.width=window.innerWidth; pcanvas.height=window.innerHeight;
+    pctx=pcanvas.getContext('2d');
+  }
+  ['waveIn','waveOut'].forEach(id=>{
+    const c=document.getElementById(id); if(!c) return;
+    const r=c.getBoundingClientRect();
+    c.width=Math.max(40, r.width); c.height=Math.max(120, r.height);
+  });
+  const wi=document.getElementById('waveIn'), wo=document.getElementById('waveOut');
+  if(wi) waveInCtx=wi.getContext('2d');
+  if(wo) waveOutCtx=wo.getContext('2d');
+}
+window.addEventListener('resize',resizeVisualCanvases);
+
+// amplitude -> heatmap colour: quiet = cool/dim, loud = hot (orange -> white)
+function heat(amp){               // amp 0..1
+  const a=Math.min(1,amp);
+  if(a<0.5){                      // cool blue -> orange
+    const t=a/0.5;
+    const r=Math.round(58+(255-58)*t), g=Math.round(110+(94-110)*t), b=Math.round(165+(58-165)*t);
+    return `rgb(${r},${g},${b})`;
+  } else {                        // orange -> hot white/yellow
+    const t=(a-0.5)/0.5;
+    const r=255, g=Math.round(94+(255-94)*t), b=Math.round(58+(220-58)*t);
+    return `rgb(${r},${g},${b})`;
+  }
+}
+
+function spawnParticles(energy, side){
+  // side 'in' -> left half of screen, 'out' -> right half. Two separate fields,
+  // each driven by its own analyser's energy.
+  const n=Math.floor(2+energy*22);
+  const W=pcanvas.width, H=pcanvas.height;
+  const x0 = side==='in' ? 0 : W*0.5;
+  const span = W*0.5;
+  for(let i=0;i<n;i++){
+    if(particles.length>700) break;
+    const ang=Math.random()*Math.PI*2, spd=(0.6+energy*5)*(0.4+Math.random());
+    // IN field leans cooler (raw source); OUT field leans warm (after the rig)
+    let hue;
+    if(side==='in'){
+      hue = Math.random()<0.5 ? '139,151,166' : (Math.random()<0.6 ? '255,209,102' : '255,255,255');
+    } else {
+      hue = Math.random()<0.5 ? '255,94,58' : (Math.random()<0.6 ? '255,209,102' : '255,255,255');
+    }
+    particles.push({
+      x:x0+Math.random()*span,
+      y:Math.random()*H,
+      vx:Math.cos(ang)*spd, vy:Math.sin(ang)*spd-0.4,
+      life:1, decay:0.005+Math.random()*0.008,
+      size:2+Math.random()*4+energy*5,
+      hue, glow:0.5+energy*0.5
+    });
+  }
+}
+
+// vertical scrolling waveform with amplitude heatmap.
+// New audio enters at the TOP, existing rows scroll DOWN.
+// `boost` lifts the colour mapping so a quieter (processed) signal still shows hue.
+function drawWaveV(cx, analyser, buf, boost){
+  if(!cx||!analyser) return;
+  const W=cx.canvas.width, H=cx.canvas.height;
+  analyser.getByteTimeDomainData(buf);
+  const step=2;
+  const img=cx.getImageData(0,0,W,H-step);
+  cx.clearRect(0,0,W,H);
+  cx.putImageData(img,0,step);
+  let mn=255,mx=0;
+  for(let i=0;i<buf.length;i++){ if(buf[i]<mn)mn=buf[i]; if(buf[i]>mx)mx=buf[i]; }
+  const amp=Math.max(Math.abs(mx-128),Math.abs(mn-128))/128;   // 0..1
+  const half=(amp*0.92)*(W/2);
+  const cxm=W/2;
+  cx.fillStyle='#0a0e14'; cx.fillRect(0,0,W,step);
+  // heatmap colour uses boosted amplitude so OUT (attenuated) still colourises
+  cx.fillStyle=heat(Math.min(1, amp*(boost||1)));
+  cx.fillRect(cxm-half,0,half*2,step);
+  cx.fillStyle=`rgba(255,255,255,${(0.15+amp*0.5).toFixed(2)})`;
+  cx.fillRect(cxm-Math.max(1,half*0.12),0,Math.max(2,half*0.24),step);
+}
+
+function visualFrame(){
+  if(!playing){ visualRAF=null; return; }
+  // --- IN energy -> left particle field ---
+  if(inAnalyser){
+    if(!waveInBuf) waveInBuf=new Uint8Array(inAnalyser.fftSize);
+    inAnalyser.getByteTimeDomainData(waveInBuf);
+    let sum=0; for(let i=0;i<waveInBuf.length;i++){ const v=(waveInBuf[i]-128)/128; sum+=v*v; }
+    const rms=Math.sqrt(sum/waveInBuf.length);
+    const transient=Math.max(0, rms-energyAvg);
+    energyAvg=energyAvg*0.88+rms*0.12;
+    if(pctx) spawnParticles(rms*2 + transient*10, 'in');
+  }
+  // --- OUT energy -> right particle field ---
+  if(outAnalyser){
+    if(!waveOutBuf) waveOutBuf=new Uint8Array(outAnalyser.fftSize);
+    outAnalyser.getByteTimeDomainData(waveOutBuf);
+    let sum=0; for(let i=0;i<waveOutBuf.length;i++){ const v=(waveOutBuf[i]-128)/128; sum+=v*v; }
+    const rmsO=Math.sqrt(sum/waveOutBuf.length);
+    const transO=Math.max(0, rmsO-energyAvgO);
+    energyAvgO=energyAvgO*0.88+rmsO*0.12;
+    // OUT is quieter (distance attenuation) so scale up a touch to stay lively
+    if(pctx) spawnParticles(rmsO*3 + transO*12, 'out');
+  }
+  // --- particles (additive glow) ---
+  if(pctx){
+    pctx.clearRect(0,0,pcanvas.width,pcanvas.height);
+    pctx.globalCompositeOperation='lighter';
+    for(let i=particles.length-1;i>=0;i--){
+      const p=particles[i];
+      p.x+=p.vx; p.y+=p.vy; p.vy+=0.008; p.life-=p.decay;
+      if(p.life<=0){ particles.splice(i,1); continue; }
+      const r=p.size*p.life;
+      const g=pctx.createRadialGradient(p.x,p.y,0,p.x,p.y,r*2.5);
+      g.addColorStop(0,`rgba(${p.hue},${(p.life*p.glow).toFixed(3)})`);
+      g.addColorStop(1,`rgba(${p.hue},0)`);
+      pctx.fillStyle=g;
+      pctx.beginPath(); pctx.arc(p.x,p.y,r*2.5,0,Math.PI*2); pctx.fill();
+    }
+    pctx.globalCompositeOperation='source-over';
+  }
+  // --- vertical heatmap waveforms (OUT gets a colour boost so it stays vivid) ---
+  drawWaveV(waveInCtx, inAnalyser, waveInBuf, 1.0);
+  drawWaveV(waveOutCtx, outAnalyser, waveOutBuf, 2.2);
+  visualRAF=requestAnimationFrame(visualFrame);
+}
+
+function startVisuals(){
+  resizeVisualCanvases();
+  // clear waveform canvases to their bg
+  [waveInCtx,waveOutCtx].forEach(cx=>{ if(cx){ cx.fillStyle='#0a0e14'; cx.fillRect(0,0,cx.canvas.width,cx.canvas.height); }});
+  if(!visualRAF) visualRAF=requestAnimationFrame(visualFrame);
+}
+function stopVisuals(){
+  if(visualRAF){ cancelAnimationFrame(visualRAF); visualRAF=null; }
+  const fade=()=>{
+    if(!pctx){ return; }
+    pctx.clearRect(0,0,pcanvas.width,pcanvas.height);
+    pctx.globalCompositeOperation='lighter';
+    let alive=false;
+    for(let i=particles.length-1;i>=0;i--){
+      const p=particles[i]; p.x+=p.vx; p.y+=p.vy; p.life-=0.025;
+      if(p.life<=0){ particles.splice(i,1); continue; }
+      alive=true;
+      const r=p.size*p.life;
+      const g=pctx.createRadialGradient(p.x,p.y,0,p.x,p.y,r*2.5);
+      g.addColorStop(0,`rgba(${p.hue},${(p.life*p.glow).toFixed(3)})`);
+      g.addColorStop(1,`rgba(${p.hue},0)`);
+      pctx.fillStyle=g; pctx.beginPath(); pctx.arc(p.x,p.y,r*2.5,0,Math.PI*2); pctx.fill();
+    }
+    pctx.globalCompositeOperation='source-over';
+    if(alive) requestAnimationFrame(fade);
+  };
+  fade();
 }
 
 /* live param update without restarting */
@@ -1083,6 +1277,7 @@ function loadFile(f){
       const cueNote = trackCues.length ? ` · <b>${trackCues.length} marker${trackCues.length>1?'s':''}</b> found` : '';
       els.loaded.innerHTML=`Loaded <b>${fileName}</b> · ${audioBuf.duration.toFixed(1)}s · ${audioBuf.numberOfChannels}ch${cueNote}`;
       els.controls.classList.remove('hidden');
+      resizeVisualCanvases();
       els.play.disabled=false; els.render.disabled=false;
       renderMarkerBar();
       drawField();
@@ -1342,6 +1537,7 @@ els.render.addEventListener('click',render);
 renderBedList();
 refreshUploadedGroup();
 drawField();
+resizeVisualCanvases();
 </script>
 </body>
 </html>

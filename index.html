@@ -116,9 +116,11 @@
   .eq{margin-top:22px;padding-top:18px;border-top:1px solid var(--line)}
   .eq-bands{display:flex;justify-content:space-around;align-items:flex-end;gap:8px;margin-top:14px}
   .eq-band{display:flex;flex-direction:column;align-items:center;gap:7px;flex:1}
-  .eq-slider{-webkit-appearance:slider-vertical;appearance:slider-vertical;width:8px;height:120px;writing-mode:vertical-lr;direction:rtl;background:var(--line);border-radius:4px;outline:none}
-  .eq-slider::-webkit-slider-thumb{-webkit-appearance:none;width:20px;height:14px;border-radius:3px;background:var(--ink);border:2px solid var(--stage);cursor:pointer}
-  .eq-slider::-moz-range-thumb{width:20px;height:14px;border-radius:3px;background:var(--ink);border:2px solid var(--stage);cursor:pointer}
+  .eq-slot{height:120px;width:24px;display:flex;align-items:center;justify-content:center}
+  .eq-slider{-webkit-appearance:none;appearance:none;width:120px;height:6px;transform:rotate(-90deg);
+    background:var(--line);border-radius:4px;outline:none;cursor:pointer}
+  .eq-slider::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:16px;height:20px;border-radius:3px;background:var(--ink);border:2px solid var(--stage);cursor:pointer}
+  .eq-slider::-moz-range-thumb{width:16px;height:20px;border-radius:3px;background:var(--ink);border:2px solid var(--stage);cursor:pointer}
   .eq-val{font-family:'Archivo Expanded',sans-serif;font-weight:600;font-size:12px;color:var(--glow);min-height:14px}
   .eq-lbl{font-size:10px;color:var(--ink-dim);letter-spacing:.05em}
   .rig-head{font-size:10px;letter-spacing:.25em;text-transform:uppercase;color:var(--ink-dim);margin-bottom:16px}
@@ -283,27 +285,27 @@
       <div class="rig-head">Input EQ — shapes the source before distance</div>
       <div class="eq-bands">
         <div class="eq-band">
-          <input type="range" class="eq-slider" id="eq0" min="-18" max="18" value="0" step="0.5" orient="vertical">
+          <div class="eq-slot"><input type="range" class="eq-slider" id="eq0" min="-18" max="18" value="0" step="0.5"></div>
           <span class="eq-val" id="eq0v">0</span>
           <span class="eq-lbl">80</span>
         </div>
         <div class="eq-band">
-          <input type="range" class="eq-slider" id="eq1" min="-18" max="18" value="0" step="0.5" orient="vertical">
+          <div class="eq-slot"><input type="range" class="eq-slider" id="eq1" min="-18" max="18" value="0" step="0.5"></div>
           <span class="eq-val" id="eq1v">0</span>
           <span class="eq-lbl">250</span>
         </div>
         <div class="eq-band">
-          <input type="range" class="eq-slider" id="eq2" min="-18" max="18" value="0" step="0.5" orient="vertical">
+          <div class="eq-slot"><input type="range" class="eq-slider" id="eq2" min="-18" max="18" value="0" step="0.5"></div>
           <span class="eq-val" id="eq2v">0</span>
           <span class="eq-lbl">1k</span>
         </div>
         <div class="eq-band">
-          <input type="range" class="eq-slider" id="eq3" min="-18" max="18" value="0" step="0.5" orient="vertical">
+          <div class="eq-slot"><input type="range" class="eq-slider" id="eq3" min="-18" max="18" value="0" step="0.5"></div>
           <span class="eq-val" id="eq3v">0</span>
           <span class="eq-lbl">4k</span>
         </div>
         <div class="eq-band">
-          <input type="range" class="eq-slider" id="eq4" min="-18" max="18" value="0" step="0.5" orient="vertical">
+          <div class="eq-slot"><input type="range" class="eq-slider" id="eq4" min="-18" max="18" value="0" step="0.5"></div>
           <span class="eq-val" id="eq4v">0</span>
           <span class="eq-lbl">10k</span>
         </div>

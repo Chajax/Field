@@ -1,0 +1,1276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Field — Festival Distance Processor</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Archivo+Expanded:wght@600;800&family=Spline+Sans+Mono:wght@400;500&display=swap');
+
+  :root{
+    --night:#0d1117;
+    --night2:#161b22;
+    --haze:#1f2733;
+    --stage:#ff5e3a;
+    --stage-dim:#7a2c1d;
+    --glow:#ffd166;
+    --far:#3a6ea5;
+    --ink:#e6edf3;
+    --ink-dim:#8b97a6;
+    --line:#2a323d;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    background:radial-gradient(120% 90% at 50% -10%, #1a2230 0%, var(--night) 55%);
+    color:var(--ink);
+    font-family:'Spline Sans Mono',monospace;
+    min-height:100vh;
+    display:flex;align-items:center;justify-content:center;
+    padding:32px 18px;
+  }
+  .panel{width:100%;max-width:560px}
+  .eyebrow{
+    font-size:11px;letter-spacing:.35em;text-transform:uppercase;
+    color:var(--ink-dim);margin-bottom:14px;
+  }
+  h1{
+    font-family:'Archivo Expanded',sans-serif;font-weight:800;
+    font-size:clamp(34px,9vw,58px);line-height:.92;letter-spacing:-.02em;
+    margin-bottom:8px;
+  }
+  h1 span{color:var(--stage)}
+  .sub{color:var(--ink-dim);font-size:13px;max-width:42ch;margin-bottom:30px;line-height:1.5}
+
+  .card{
+    background:linear-gradient(180deg,var(--night2),var(--haze));
+    border:1px solid var(--line);border-radius:14px;
+    padding:22px;margin-bottom:16px;
+  }
+  .drop{
+    display:block;
+    border:1.5px dashed var(--line);border-radius:10px;
+    padding:26px 18px;text-align:center;cursor:pointer;
+    transition:border-color .2s,background .2s;
+  }
+  .drop:hover,.drop.over{border-color:var(--stage);background:rgba(255,94,58,.05)}
+  .drop strong{color:var(--ink);font-size:14px}
+  .drop em{display:block;color:var(--ink-dim);font-style:normal;font-size:12px;margin-top:6px}
+  input[type=file]{display:none}
+
+  .loaded{font-size:12px;color:var(--ink-dim);margin-top:14px;word-break:break-all}
+  .loaded b{color:var(--glow)}
+
+  .drop-label{font-size:10px;letter-spacing:.25em;text-transform:uppercase;color:var(--ink-dim);margin-bottom:10px}
+  .drop.crowd:hover,.drop.crowd.over{border-color:var(--far);background:rgba(58,110,165,.06)}
+  .crowd-cap{font-size:11px;color:var(--far);margin-top:10px;line-height:1.5}
+  .crowd-head{display:flex;justify-content:space-between;align-items:center;margin-top:20px;margin-bottom:10px}
+  .crowd-toggle{display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none}
+  .crowd-toggle input{position:absolute;opacity:0;width:0;height:0}
+  .ct-track{width:34px;height:18px;border-radius:9px;background:var(--line);position:relative;transition:.15s}
+  .ct-knob{position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:var(--ink-dim);transition:.15s}
+  .crowd-toggle input:checked + .ct-track{background:var(--far)}
+  .crowd-toggle input:checked + .ct-track .ct-knob{left:18px;background:var(--ink)}
+  .ct-txt{font-size:11px;color:var(--ink-dim);letter-spacing:.05em;min-width:62px}
+  .crowd-off{opacity:.4;pointer-events:none}
+  .bed-list{margin-top:12px;display:flex;flex-direction:column;gap:6px}
+  .bed{display:flex;align-items:center;gap:10px;padding:9px 11px;border:1px solid var(--line);
+    border-radius:8px;background:var(--night2);cursor:pointer;transition:.15s}
+  .bed:hover{border-color:var(--far)}
+  .bed.active{border-color:var(--far);background:rgba(58,110,165,.1)}
+  .bed .radio{flex:0 0 14px;width:14px;height:14px;border-radius:50%;border:2px solid var(--line);position:relative}
+  .bed.active .radio{border-color:var(--far)}
+  .bed.active .radio::after{content:'';position:absolute;inset:2px;border-radius:50%;background:var(--far)}
+  .bed .bn{flex:1;font-size:12px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .bed .bd{font-size:10px;color:var(--ink-dim);flex:0 0 auto}
+  .bed .del{flex:0 0 auto;width:24px;height:24px;border-radius:6px;border:1px solid var(--line);
+    background:transparent;color:var(--ink-dim);cursor:pointer;font-size:14px;line-height:1;padding:0}
+  .bed .del:hover{border-color:var(--stage);color:var(--stage)}
+
+  /* distance field visual */
+  .field{position:relative;height:120px;margin:6px 0 22px;overflow:hidden;border-radius:8px;background:#0a0e14}
+  .field svg{width:100%;height:100%;display:block}
+  .listener,.source{transition:transform .15s linear,opacity .15s}
+
+  .readout{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px}
+  .dist{font-family:'Archivo Expanded',sans-serif;font-weight:800;font-size:40px;letter-spacing:-.02em}
+  .dist em{font-style:normal;font-size:15px;color:var(--ink-dim);font-weight:400;font-family:'Spline Sans Mono'}
+  .tag{font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--stage);text-align:right;line-height:1.4}
+
+  input[type=range]{
+    -webkit-appearance:none;width:100%;height:4px;border-radius:4px;
+    background:linear-gradient(90deg,var(--stage),var(--far));
+    outline:none;margin:8px 0 4px;
+  }
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none;width:22px;height:22px;border-radius:50%;
+    background:var(--ink);border:3px solid var(--stage);cursor:pointer;
+    box-shadow:0 0 14px rgba(255,94,58,.6);
+  }
+  input[type=range]::-moz-range-thumb{
+    width:22px;height:22px;border-radius:50%;background:var(--ink);
+    border:3px solid var(--stage);cursor:pointer;
+  }
+  .scale{display:flex;justify-content:space-between;font-size:10px;color:var(--ink-dim);letter-spacing:.1em}
+
+  .rig{margin-top:22px;padding-top:18px;border-top:1px solid var(--line)}
+  .eq{margin-top:22px;padding-top:18px;border-top:1px solid var(--line)}
+  .eq-bands{display:flex;justify-content:space-around;align-items:flex-end;gap:8px;margin-top:14px}
+  .eq-band{display:flex;flex-direction:column;align-items:center;gap:7px;flex:1}
+  .eq-slider{-webkit-appearance:slider-vertical;appearance:slider-vertical;width:8px;height:120px;writing-mode:vertical-lr;direction:rtl;background:var(--line);border-radius:4px;outline:none}
+  .eq-slider::-webkit-slider-thumb{-webkit-appearance:none;width:20px;height:14px;border-radius:3px;background:var(--ink);border:2px solid var(--stage);cursor:pointer}
+  .eq-slider::-moz-range-thumb{width:20px;height:14px;border-radius:3px;background:var(--ink);border:2px solid var(--stage);cursor:pointer}
+  .eq-val{font-family:'Archivo Expanded',sans-serif;font-weight:600;font-size:12px;color:var(--glow);min-height:14px}
+  .eq-lbl{font-size:10px;color:var(--ink-dim);letter-spacing:.05em}
+  .rig-head{font-size:10px;letter-spacing:.25em;text-transform:uppercase;color:var(--ink-dim);margin-bottom:16px}
+  .pa-top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:2px}
+  .pa-label{font-size:12px;color:var(--ink)}
+  .pa-val{font-family:'Archivo Expanded',sans-serif;font-weight:600;font-size:15px;color:var(--glow)}
+  .pa input[type=range]{background:linear-gradient(90deg,var(--far),var(--glow),var(--stage))}
+  .tune-label{font-size:11px;color:var(--ink);margin:18px 0 9px}
+  .tunes{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .tune{font-family:'Spline Sans Mono';font-size:12px;padding:11px 8px;border-radius:8px;
+    border:1px solid var(--line);background:var(--night2);color:var(--ink-dim);cursor:pointer;transition:.15s;letter-spacing:.02em}
+  .tune:hover{border-color:var(--far);color:var(--ink)}
+  .tune.active{border-color:var(--stage);color:var(--stage);background:rgba(255,94,58,.07)}
+  .tune-desc{font-size:11px;color:var(--ink-dim);margin-top:11px;line-height:1.5;min-height:2.6em}
+  .boosts{display:flex;flex-direction:column;gap:14px;margin-top:18px;padding-top:16px;border-top:1px solid var(--line)}
+  .boost .pa-val{color:var(--glow)}
+  .boost input[type=range]{background:linear-gradient(90deg,var(--far),var(--stage))}
+  .boost.dim input[type=range]{opacity:.35;pointer-events:none}
+  .boost.dim .pa-val{opacity:.35}
+  .mini-toggle{display:inline-block;vertical-align:middle;margin-left:8px;cursor:pointer}
+  .mini-toggle input{position:absolute;opacity:0;width:0;height:0}
+  .mt-track{display:inline-block;width:26px;height:14px;border-radius:7px;background:var(--line);position:relative;transition:.15s;vertical-align:middle}
+  .mt-knob{position:absolute;top:2px;left:2px;width:10px;height:10px;border-radius:50%;background:var(--ink-dim);transition:.15s}
+  .mini-toggle input:checked + .mt-track{background:var(--stage)}
+  .mini-toggle input:checked + .mt-track .mt-knob{left:14px;background:var(--night)}
+
+  .cheers{margin-top:22px;padding-top:18px;border-top:1px solid var(--line)}
+  .cheer-add{display:flex;gap:7px;margin-bottom:12px;flex-wrap:wrap}
+  .cheer-add select,.cheer-add input[type=text]{
+    font-family:'Spline Sans Mono';font-size:12px;padding:9px 10px;border-radius:7px;
+    border:1px solid var(--line);background:var(--night2);color:var(--ink);min-width:0;
+  }
+  .cheer-add select{flex:1 1 130px}
+  .cheer-add input[type=text]{flex:0 0 78px;text-align:center}
+  .cheer-add input[type=text]:focus,.cheer-add select:focus{outline:none;border-color:var(--stage)}
+  .add-cheer{flex:0 0 auto;font-family:'Spline Sans Mono';font-size:12px;padding:9px 14px;border-radius:7px;
+    border:1px solid var(--stage);background:rgba(255,94,58,.08);color:var(--stage);cursor:pointer;transition:.15s;font-weight:500}
+  .add-cheer:hover{background:var(--stage);color:var(--night)}
+
+  .cheer-row{display:flex;align-items:center;gap:10px;padding:9px 11px;border:1px solid var(--line);
+    border-radius:8px;background:var(--night2);margin-bottom:7px}
+  .cheer-row .ct{font-family:'Archivo Expanded',sans-serif;font-weight:600;font-size:13px;color:var(--glow);flex:0 0 56px}
+  .cheer-row .cn{font-size:12px;color:var(--ink);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .cheer-row .cg{display:flex;align-items:center;gap:6px;flex:0 0 96px}
+  .cheer-row .cg input{width:62px}
+  .cheer-row .cg span{font-size:10px;color:var(--ink-dim);width:26px;text-align:right}
+  .cheer-row .del{flex:0 0 auto;width:24px;height:24px;border-radius:6px;border:1px solid var(--line);
+    background:transparent;color:var(--ink-dim);cursor:pointer;font-size:14px;line-height:1;padding:0}
+  .cheer-row .del:hover{border-color:var(--stage);color:var(--stage)}
+  .cheer-empty{font-size:11px;color:var(--ink-dim);line-height:1.5}
+  .cheer-empty b{color:var(--glow);font-weight:400}
+
+  .markers{margin-top:22px;padding-top:18px;border-top:1px solid var(--line)}
+  .marker-strip{position:relative;height:34px;background:#0a0e14;border-radius:7px;margin-bottom:12px;overflow:hidden}
+  .marker-strip .mk{position:absolute;top:0;bottom:0;width:2px;background:var(--glow)}
+  .marker-strip .mk::after{content:'';position:absolute;top:0;left:-3px;width:8px;height:8px;border-radius:50%;background:var(--glow)}
+  .marker-act{display:flex;gap:7px;align-items:center;flex-wrap:wrap}
+  .marker-count{font-size:11px;color:var(--ink-dim);margin-bottom:12px;line-height:1.5}
+  .marker-act select{font-family:'Spline Sans Mono';font-size:12px;padding:9px 10px;border-radius:7px;
+    border:1px solid var(--line);background:var(--night2);color:var(--ink);flex:1 1 130px;min-width:0}
+  .marker-act select:focus{outline:none;border-color:var(--stage)}
+  .marker-mode{display:flex;gap:8px;margin-bottom:12px}
+  .mm{flex:1;font-family:'Spline Sans Mono';font-size:12px;padding:10px 8px;border-radius:8px;
+    border:1px solid var(--line);background:var(--night2);color:var(--ink-dim);cursor:pointer;transition:.15s}
+  .mm:hover{border-color:var(--far);color:var(--ink)}
+  .mm.active{border-color:var(--far);color:var(--far);background:rgba(58,110,165,.1)}
+  .msel{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--ink-dim);flex:1 1 130px}
+  .msel select{flex:1}
+  .region-list{margin-top:12px;display:flex;flex-direction:column;gap:7px}
+  .region-row{display:flex;align-items:center;gap:10px;padding:9px 11px;border:1px solid var(--line);
+    border-radius:8px;background:var(--night2)}
+  .region-row .rspan{font-family:'Archivo Expanded',sans-serif;font-weight:600;font-size:12px;color:var(--far);flex:0 0 auto}
+  .region-row .rn{font-size:12px;color:var(--ink);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .region-row .cg{display:flex;align-items:center;gap:6px;flex:0 0 96px}
+  .region-row .cg input{width:62px}
+  .region-row .cg span{font-size:10px;color:var(--ink-dim);width:26px;text-align:right}
+  .region-row .del{flex:0 0 auto;width:24px;height:24px;border-radius:6px;border:1px solid var(--line);
+    background:transparent;color:var(--ink-dim);cursor:pointer;font-size:14px;line-height:1;padding:0}
+  .region-row .del:hover{border-color:var(--stage);color:var(--stage)}
+
+  .btns{display:flex;gap:10px;margin-top:6px}
+  button{
+    flex:1;font-family:'Spline Sans Mono';font-size:13px;font-weight:500;
+    padding:13px;border-radius:9px;border:1px solid var(--line);cursor:pointer;
+    background:var(--night2);color:var(--ink);transition:.15s;letter-spacing:.05em;
+  }
+  button:hover:not(:disabled){border-color:var(--stage);color:var(--stage)}
+  button:disabled{opacity:.35;cursor:not-allowed}
+  button.play{background:var(--stage);color:var(--night);border-color:var(--stage);font-weight:700}
+  button.play:hover:not(:disabled){background:var(--glow);border-color:var(--glow);color:var(--night)}
+
+  .note{font-size:11px;color:var(--ink-dim);margin-top:14px;line-height:1.5}
+  .hidden{display:none}
+</style>
+</head>
+<body>
+<div class="panel">
+  <div class="eyebrow">Acoustic Distance Renderer</div>
+  <h1>Field<span>.</span></h1>
+  <p class="sub">Drop in any audio and walk it away from the stage. Distance rolls off the highs, swells the low end, soaks the tail in open-air reverb, and folds the crowd into the gaps — the way sound actually carries across a festival ground at night.</p>
+
+  <div class="card">
+    <div class="drop-label">01 · Source — the stage</div>
+    <label class="drop" id="drop">
+      <input type="file" id="file" accept="audio/*">
+      <strong>Drop an audio file</strong>
+      <em>or tap to browse — wav, mp3, flac, m4a</em>
+    </label>
+    <div class="loaded hidden" id="loaded"></div>
+
+    <div class="crowd-head">
+      <span class="drop-label" style="margin:0">02 · Crowd beds — optional</span>
+      <label class="crowd-toggle">
+        <input type="checkbox" id="crowdOn" checked>
+        <span class="ct-track"><span class="ct-knob"></span></span>
+        <span class="ct-txt" id="crowdOnTxt">Crowd on</span>
+      </label>
+    </div>
+    <label class="drop crowd" id="dropCrowd">
+      <input type="file" id="fileCrowd" accept="audio/*" multiple>
+      <strong>Drop crowd recordings</strong>
+      <em>add as many as you like — cheers, ambience, field noise</em>
+    </label>
+    <div class="bed-list" id="bedList"></div>
+    <div class="crowd-cap" id="crowdCap">The active bed loops under the track and follows distance. Pick one below. Turn the crowd off if your track already has crowd baked in.</div>
+  </div>
+
+  <div class="card hidden" id="controls">
+    <div class="field">
+      <svg viewBox="0 0 560 120" preserveAspectRatio="none">
+        <defs>
+          <radialGradient id="stageGlow" cx="0" cy="0.5" r="1">
+            <stop offset="0%" stop-color="var(--stage)" stop-opacity="0.55"/>
+            <stop offset="100%" stop-color="var(--stage)" stop-opacity="0"/>
+          </radialGradient>
+        </defs>
+        <rect x="0" y="0" width="560" height="120" fill="url(#stageGlow)"/>
+        <!-- stage -->
+        <rect x="6" y="44" width="14" height="32" rx="2" fill="var(--stage)"/>
+        <line x1="13" y1="44" x2="13" y2="20" stroke="var(--stage-dim)" stroke-width="2"/>
+        <!-- ground line -->
+        <line x1="0" y1="92" x2="560" y2="92" stroke="var(--line)" stroke-width="1"/>
+        <!-- wavefronts -->
+        <g id="waves"></g>
+        <!-- listener -->
+        <g class="listener" id="listenerG">
+          <circle cx="0" cy="68" r="5" fill="var(--ink)"/>
+          <circle cx="0" cy="68" r="11" fill="none" stroke="var(--far)" stroke-width="1.5" opacity="0.6"/>
+        </g>
+      </svg>
+    </div>
+
+    <div class="readout">
+      <div class="dist"><span id="distNum">40</span><em> m</em></div>
+      <div class="tag" id="zoneTag">FRONT<br>OF HOUSE</div>
+    </div>
+
+    <input type="range" id="dist" min="2" max="800" value="40" step="1">
+    <div class="scale"><span>2 m · on the rail</span><span>800 m · car park</span></div>
+
+    <div class="eq">
+      <div class="rig-head">Input EQ — shapes the source before distance</div>
+      <div class="eq-bands">
+        <div class="eq-band">
+          <input type="range" class="eq-slider" id="eq0" min="-18" max="18" value="0" step="0.5" orient="vertical">
+          <span class="eq-val" id="eq0v">0</span>
+          <span class="eq-lbl">80</span>
+        </div>
+        <div class="eq-band">
+          <input type="range" class="eq-slider" id="eq1" min="-18" max="18" value="0" step="0.5" orient="vertical">
+          <span class="eq-val" id="eq1v">0</span>
+          <span class="eq-lbl">250</span>
+        </div>
+        <div class="eq-band">
+          <input type="range" class="eq-slider" id="eq2" min="-18" max="18" value="0" step="0.5" orient="vertical">
+          <span class="eq-val" id="eq2v">0</span>
+          <span class="eq-lbl">1k</span>
+        </div>
+        <div class="eq-band">
+          <input type="range" class="eq-slider" id="eq3" min="-18" max="18" value="0" step="0.5" orient="vertical">
+          <span class="eq-val" id="eq3v">0</span>
+          <span class="eq-lbl">4k</span>
+        </div>
+        <div class="eq-band">
+          <input type="range" class="eq-slider" id="eq4" min="-18" max="18" value="0" step="0.5" orient="vertical">
+          <span class="eq-val" id="eq4v">0</span>
+          <span class="eq-lbl">10k</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="rig">
+      <div class="rig-head">The rig — how the PA is driven</div>
+
+      <div class="pa">
+        <div class="pa-top">
+          <span class="pa-label">PA level</span>
+          <span class="pa-val" id="paVal">100 dB SPL</span>
+        </div>
+        <input type="range" id="pa" min="85" max="115" value="100" step="1">
+        <div class="scale"><span>85 · club rig</span><span>115 · main stage wall</span></div>
+      </div>
+
+      <div class="tune-label">Speaker tuning</div>
+      <div class="tunes" id="tunes">
+        <button class="tune active" data-tune="flat">Flat / live band</button>
+        <button class="tune" data-tune="dance">Dance · scooped</button>
+        <button class="tune" data-tune="bass">Bass · sub-heavy</button>
+        <button class="tune" data-tune="vocal">Vocal · mid-forward</button>
+      </div>
+      <div class="tune-desc" id="tuneDesc">Even response — what a well-balanced festival system aims for.</div>
+
+      <div class="boosts">
+        <div class="boost">
+          <div class="pa-top">
+            <span class="pa-label">Drum boost
+              <label class="mini-toggle"><input type="checkbox" id="drumOn" checked><span class="mt-track"><span class="mt-knob"></span></span></label>
+            </span>
+            <span class="pa-val" id="drumVal">0 dB</span>
+          </div>
+          <input type="range" id="drum" min="0" max="12" value="0" step="0.5">
+          <div class="scale"><span>off</span><span>+12 dB kick & punch</span></div>
+        </div>
+        <div class="boost">
+          <div class="pa-top">
+            <span class="pa-label">Crowd boost</span>
+            <span class="pa-val" id="crowdBoostVal">0 dB</span>
+          </div>
+          <input type="range" id="crowdBoost" min="-12" max="12" value="0" step="0.5">
+          <div class="scale"><span>−12 dB</span><span>+12 dB louder crowd</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="markers hidden" id="markersPanel">
+      <div class="rig-head">WAV markers — found in the track</div>
+      <div class="marker-strip" id="markerStrip"></div>
+      <div class="marker-count" id="markerCount"></div>
+
+      <div class="marker-mode" id="markerMode">
+        <button class="mm active" data-mode="cheer">Cheers (one-shot)</button>
+        <button class="mm" data-mode="crowd">Crowd region (span)</button>
+      </div>
+
+      <div class="marker-act" id="cheerImportRow">
+        <select id="markerSound">
+          <option value="roar">Crowd roar</option>
+          <option value="whoop">Whoops & whistles</option>
+          <option value="applause">Applause burst</option>
+          <option value="airhorn">Air horn</option>
+        </select>
+        <button id="markerImport" class="add-cheer">Import all as cheers</button>
+      </div>
+
+      <div class="marker-act hidden" id="regionAddRow">
+        <label class="msel">Start <select id="regStart"></select></label>
+        <label class="msel">End <select id="regEnd"></select></label>
+        <button id="regionAdd" class="add-cheer">+ Add region</button>
+      </div>
+      <div class="region-list" id="regionList"></div>
+    </div>
+
+    <div class="cheers">
+      <div class="rig-head">Crew cheers — dropped on the timeline</div>
+      <div class="cheer-add">
+        <select id="cheerKind">
+          <optgroup label="Built-in">
+            <option value="roar">Crowd roar</option>
+            <option value="whoop">Whoops & whistles</option>
+            <option value="applause">Applause burst</option>
+            <option value="airhorn">Air horn</option>
+          </optgroup>
+          <optgroup label="Uploaded clips" id="uploadedGroup"></optgroup>
+          <option value="__upload__">＋ Upload new clip…</option>
+        </select>
+        <input type="text" id="cheerTime" placeholder="0:00.0" inputmode="decimal">
+        <button id="cheerAdd" class="add-cheer">+ Add</button>
+        <input type="file" id="cheerFile" accept="audio/*" hidden>
+      </div>
+      <div class="cheer-list" id="cheerList"></div>
+      <div class="cheer-empty" id="cheerEmpty">No cheers yet. Pick a sound or upload a clip, set a timestamp like <b>1:24.5</b>, and add it. Each one gets processed by distance + rig just like the music.</div>
+    </div>
+
+    <div class="btns">
+      <button id="play" class="play" disabled>▶ Preview</button>
+      <button id="render" disabled>Render & download</button>
+    </div>
+    <div class="note" id="note">Move the slider live while previewing. “Render” bakes the current distance, rig, and all cheers into a downloadable WAV.</div>
+  </div>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+let audioBuf=null, audioRaw=null, ctx=null, srcNode=null, chain=null, playing=false, fileName='';
+let paLevel=100, tuneId='flat';
+let drumBoost=0, crowdBoostDb=0;  // dB; drum = source kick/punch EQ, crowd = crowd-layer gain
+let drumOn=true;                  // drum boost on/off
+let eqGains=[0,0,0,0,0];           // input 5-band EQ gains (dB)
+const EQ_FREQS=[80,250,1000,4000,10000];
+const EQ_TYPES=['lowshelf','peaking','peaking','peaking','highshelf'];
+let crowdBeds=[];     // {id, name, buffer}
+let activeCrowd=null; // id of the active bed, or null for synthetic/none
+let crowdOn=true;     // master crowd switch — off when track already has crowd
+let crowdSeq=0;
+let trackCues=[];     // parsed markers from the main track (embedded cues only)
+let regionMarkers=[]; // start-of-track + cues + end-of-track, for region selectors
+let cheers=[];        // {id, kind, name, time, gain, buffer}
+let cheerSeq=0;
+let uploadedClips=[]; // {key, name, buffer} reusable uploaded cheer clips
+let crowdRegions=[];  // {id, bedId, start, end(null=track end), gain, label}
+let regionSeq=0;
+let previewStart=0;   // ctx.currentTime when preview began, for scheduling
+
+const els={
+  drop:$('#drop'), file:$('#file'), loaded:$('#loaded'),
+  controls:$('#controls'), dist:$('#dist'), distNum:$('#distNum'),
+  zoneTag:$('#zoneTag'), play:$('#play'), render:$('#render'),
+  note:$('#note'), listenerG:$('#listenerG'), waves:$('#waves'),
+  dropCrowd:$('#dropCrowd'), fileCrowd:$('#fileCrowd'),
+  bedList:$('#bedList'), crowdCap:$('#crowdCap'),
+  crowdOn:$('#crowdOn'), crowdOnTxt:$('#crowdOnTxt'),
+  pa:$('#pa'), paVal:$('#paVal'), tunes:$('#tunes'), tuneDesc:$('#tuneDesc'),
+  drum:$('#drum'), drumVal:$('#drumVal'), drumOn:$('#drumOn'), crowdBoost:$('#crowdBoost'), crowdBoostVal:$('#crowdBoostVal'),
+  cheerKind:$('#cheerKind'), cheerTime:$('#cheerTime'), cheerAdd:$('#cheerAdd'),
+  uploadedGroup:$('#uploadedGroup'),
+  cheerFile:$('#cheerFile'), cheerList:$('#cheerList'), cheerEmpty:$('#cheerEmpty'),
+  markersPanel:$('#markersPanel'), markerStrip:$('#markerStrip'), markerCount:$('#markerCount'),
+  markerMode:$('#markerMode'), markerSound:$('#markerSound'), markerImport:$('#markerImport'),
+  cheerImportRow:$('#cheerImportRow'), regionAddRow:$('#regionAddRow'),
+  regStart:$('#regStart'), regEnd:$('#regEnd'), regionAdd:$('#regionAdd'), regionList:$('#regionList')
+};
+
+/* ---------- WAV cue-point (marker) parser ----------
+   Reads embedded markers from a RIFF/WAVE ArrayBuffer. Cue positions live in
+   the 'cue ' chunk as sample offsets; optional labels live in a LIST/adtl
+   chunk of 'labl' sub-chunks keyed by cue id. Returns [{time, label}] in
+   seconds, or [] if the file isn't a WAV or has no cues. */
+function parseWavCues(ab){
+  const dv=new DataView(ab);
+  if(dv.byteLength<12) return [];
+  const tag=(o)=>String.fromCharCode(dv.getUint8(o),dv.getUint8(o+1),dv.getUint8(o+2),dv.getUint8(o+3));
+  if(tag(0)!=='RIFF' || tag(8)!=='WAVE') return [];
+  let rate=44100, cues=[], labels={};
+  let p=12;
+  while(p+8<=dv.byteLength){
+    const id=tag(p), size=dv.getUint32(p+4,true), body=p+8;
+    if(id==='fmt '){
+      rate=dv.getUint32(body+4,true) || 44100;
+    }else if(id==='cue '){
+      const n=dv.getUint32(body,true);
+      let q=body+4;
+      for(let i=0;i<n && q+24<=dv.byteLength;i++){
+        const cueId=dv.getUint32(q,true);
+        const sampleOffset=dv.getUint32(q+20,true); // 'Sample Offset' field
+        cues.push({cueId, sample:sampleOffset});
+        q+=24;
+      }
+    }else if(id==='LIST'){
+      const listType=tag(body);
+      if(listType==='adtl'){
+        let q=body+4;
+        while(q+8<=body+size){
+          const sid=tag(q), ssize=dv.getUint32(q+4,true), sbody=q+8;
+          if(sid==='labl' || sid==='note'){
+            const cueId=dv.getUint32(sbody,true);
+            let str='';
+            for(let k=sbody+4;k<sbody+ssize;k++){
+              const ch=dv.getUint8(k); if(ch===0) break; str+=String.fromCharCode(ch);
+            }
+            if(str) labels[cueId]=str;
+          }
+          q+=8+ssize+(ssize&1); // chunks are word-aligned
+        }
+      }
+    }
+    p=body+size+(size&1);
+  }
+  return cues.map(c=>({
+    time: c.sample/rate,
+    label: labels[c.cueId] || ''
+  })).sort((a,b)=>a.time-b.time);
+}
+
+
+const TUNINGS={
+  flat:  {desc:'Even response — what a well-balanced festival system aims for.',
+          bands:[]},
+  dance: {desc:'Scooped mids, lifted sub and air — the classic club/dance curve. Big lows, crisp top, mids pulled back.',
+          bands:[{type:'lowshelf',f:80,g:5},{type:'peaking',f:600,g:-5,Q:1},{type:'highshelf',f:9000,g:4}]},
+  bass:  {desc:'Sub-heavy rig — extra weight below 100 Hz for a chest-hitting low end, top end eased off.',
+          bands:[{type:'lowshelf',f:70,g:8},{type:'peaking',f:120,g:3,Q:1.2},{type:'highshelf',f:8000,g:-3}]},
+  vocal: {desc:'Mid-forward voicing — presence lifted so vocals and leads cut through, lows kept tight.',
+          bands:[{type:'peaking',f:2500,g:5,Q:0.9},{type:'peaking',f:300,g:-2,Q:1},{type:'lowshelf',f:80,g:-2}]}
+};
+
+/* ---------- built-in synthetic cheer generators ----------
+   Each returns an AudioBuffer rendered on the given context. They're crude
+   but read clearly once processed: roar = filtered noise swell, whoop =
+   noise + voice-like formant peaks, applause = dense random claps, airhorn
+   = stacked sawtooth tones. */
+const CHEER_LABELS={roar:'Crowd roar',whoop:'Whoops & whistles',applause:'Applause burst',airhorn:'Air horn'};
+
+function synthCheer(c, kind){
+  const rate=c.sampleRate;
+  const dur={roar:3.2,whoop:2.4,applause:3.0,airhorn:1.6}[kind]||2.5;
+  const len=Math.floor(rate*dur);
+  const buf=c.createBuffer(2,len,rate);
+  for(let ch=0;ch<2;ch++){
+    const d=buf.getChannelData(ch);
+    if(kind==='roar'){
+      let lp=0;
+      for(let i=0;i<len;i++){
+        const t=i/len;
+        const env=Math.sin(Math.PI*Math.min(1,t*1.4))*Math.pow(1-t,0.4);
+        lp=lp*0.96+(Math.random()*2-1)*0.04;          // low-passed noise = throaty roar
+        d[i]=(lp*3 + (Math.random()*2-1)*0.15)*env;
+      }
+    }else if(kind==='whoop'){
+      for(let i=0;i<len;i++){
+        const t=i/len;
+        const env=Math.pow(Math.sin(Math.PI*t),0.6);
+        // a couple of swept whistle tones + breathy noise
+        const f1=900+600*Math.sin(t*7+ch), f2=1500+800*Math.sin(t*5+1);
+        const tone=Math.sin(2*Math.PI*f1*t*dur)*0.18+Math.sin(2*Math.PI*f2*t*dur)*0.12;
+        d[i]=(tone+(Math.random()*2-1)*0.2)*env;
+      }
+    }else if(kind==='applause'){
+      // dense randomized claps, each a fast noise transient
+      for(let i=0;i<len;i++) d[i]=0;
+      const claps=Math.floor(dur*180);
+      for(let k=0;k<claps;k++){
+        const pos=Math.floor(Math.random()*(len-400));
+        const amp=0.3+Math.random()*0.5;
+        const env=Math.sin(Math.PI*Math.min(1,(pos/len)*1.3))*Math.pow(1-pos/len,0.3);
+        for(let j=0;j<200;j++){
+          d[pos+j]+=(Math.random()*2-1)*amp*Math.pow(1-j/200,3)*env*0.5;
+        }
+      }
+    }else if(kind==='airhorn'){
+      const base=ch?233:220; // slight detune across channels
+      for(let i=0;i<len;i++){
+        const t=i/len;
+        const env=t<0.05?t/0.05:Math.pow(1-(t-0.05)/0.95,0.5);
+        let s=0;
+        for(let h=1;h<=8;h++) s+=Math.sin(2*Math.PI*base*h*t*dur)/h; // sawtooth stack
+        d[i]=s*0.18*env;
+      }
+    }
+  }
+  return buf;
+}
+
+/* ---------- distance -> acoustic params ----------
+   Tuned, not linear. Returns the parameter set used both for
+   live preview and offline render so they stay identical. */
+function paramsFor(d){
+  d = Math.max(1, d);
+  const n = Math.min(1, Math.log10(d/2)/Math.log10(400)); // 0 at 2m, ~1 at 800m
+  // Atmospheric absorption ~ freq^2 (~5 dB/100m at 8kHz, dry). Effective lowpass
+  // corner = frequency where cumulative absorption hits ~8 dB over distance d.
+  const lp = Math.min(20000, Math.max(250,
+             8000 * Math.sqrt(8 / Math.max(1, (5/100)*d))));
+  return {
+    lowpass: lp,
+    highshelf: Math.max(-26, -(5/100)*d*1.2),  // residual air + crowd scatter
+    highshelfFreq: 3500,
+    bassGain: 7 * n,             // lows survive (barely absorbed, ground coupled)
+    bassFreq: 90,
+    // ground-effect dip over the crowd (200-600Hz, deepens with grazing range)
+    groundFreq: 500 - 200*Math.min(1, Math.max(0,(d-8)/200)),
+    groundGain: -9 * Math.min(1, Math.max(0,(d-8)/200)),
+    wet: Math.min(0.7, 0.10 + 0.65*n),
+    // Geometric spreading: line-source 3 dB/doubling near field, steepening to
+    // point-source 6 dB/doubling far field (festival line-array behaviour).
+    gain: Math.pow(10, ( -(3 + 3*Math.min(1,Math.max(0,(d-120)/700)))
+                         * Math.log2(Math.max(d,4)/4) )/20)
+          * Math.pow(10, (paLevel-100)/40), // PA drive
+    crowd: Math.min(0.35, 0.04 + 0.4*n),
+    predelay: Math.min(0.09, d/3430)
+  };
+}
+
+function zone(d){
+  if(d<=5) return 'ON<br>THE RAIL';
+  if(d<=30) return 'FRONT<br>OF HOUSE';
+  if(d<=120) return 'MID<br>CROWD';
+  if(d<=350) return 'BACK<br>FIELD';
+  return 'CAR<br>PARK';
+}
+
+/* ---------- impulse for convolution reverb ---------- */
+function makeIR(ctx, seconds, decay){
+  const rate=ctx.sampleRate, len=rate*seconds;
+  const ir=ctx.createBuffer(2,len,rate);
+  for(let c=0;c<2;c++){
+    const ch=ir.getChannelData(c);
+    for(let i=0;i<len;i++){
+      ch[i]=(Math.random()*2-1)*Math.pow(1-i/len,decay);
+    }
+  }
+  return ir;
+}
+
+/* ---------- pink-ish noise buffer for crowd bed ---------- */
+function makeCrowd(ctx, seconds){
+  const rate=ctx.sampleRate, len=rate*seconds;
+  const buf=ctx.createBuffer(1,len,rate);
+  const ch=buf.getChannelData(0);
+  let b0=0,b1=0,b2=0;
+  for(let i=0;i<len;i++){
+    const w=Math.random()*2-1;
+    b0=0.99765*b0+w*0.0990460;
+    b1=0.96300*b1+w*0.2965164;
+    b2=0.57000*b2+w*1.0526913;
+    ch[i]=(b0+b1+b2+w*0.1848)*0.05;
+  }
+  return buf;
+}
+
+/* ---------- build processing graph on a given context ----------
+   Works for both AudioContext (live) and OfflineAudioContext (render). */
+function buildChain(c, p, withCrowd){
+  const input=c.createGain();
+
+  const lp=c.createBiquadFilter();
+  lp.type='lowpass'; lp.frequency.value=p.lowpass; lp.Q.value=0.5;
+
+  const lp2=c.createBiquadFilter();   // cascade -> 24 dB/oct, kills highs convincingly
+  lp2.type='lowpass'; lp2.frequency.value=p.lowpass; lp2.Q.value=0.5;
+
+  const hs=c.createBiquadFilter();    // pulls down any surviving air/presence
+  hs.type='highshelf'; hs.frequency.value=p.highshelfFreq; hs.gain.value=p.highshelf;
+
+  const bass=c.createBiquadFilter();
+  bass.type='lowshelf'; bass.frequency.value=p.bassFreq; bass.gain.value=p.bassGain;
+
+  // ground-effect dip: destructive interference grazing over the crowd (200-600Hz)
+  const ground=c.createBiquadFilter();
+  ground.type='peaking'; ground.frequency.value=p.groundFreq; ground.Q.value=1.2; ground.gain.value=p.groundGain;
+
+  const pre=c.createDelay(0.2); pre.delayTime.value=p.predelay;
+
+  const conv=c.createConvolver();
+  conv.buffer=makeIR(c, 2.2, 3.0);
+
+  const dry=c.createGain(); dry.gain.value=1-p.wet;
+  const wet=c.createGain(); wet.gain.value=p.wet;
+
+  const out=c.createGain(); out.gain.value=p.gain;
+
+  // ---- speaker tuning: a cascade of EQ bands the PA is voiced with ----
+  // ---- input 5-band EQ: the very first thing, before tuning/distance ----
+  const eqNodes=[];
+  let eqOut=input;
+  for(let i=0;i<5;i++){
+    const f=c.createBiquadFilter();
+    f.type=EQ_TYPES[i]; f.frequency.value=EQ_FREQS[i];
+    if(EQ_TYPES[i]==='peaking') f.Q.value=1.0;
+    f.gain.value=eqGains[i];
+    eqOut.connect(f); eqOut=f; eqNodes.push(f);
+  }
+
+  // This shapes the source BEFORE distance processing (it's what leaves the rig).
+  const tune=TUNINGS[tuneId]||TUNINGS.flat;
+  let tuneOut=eqOut;
+  tune.bands.forEach(b=>{
+    const f=c.createBiquadFilter();
+    f.type=b.type; f.frequency.value=b.f; f.gain.value=b.g;
+    if(b.Q) f.Q.value=b.Q;
+    tuneOut.connect(f); tuneOut=f;
+  });
+
+  // ---- drum boost: kick punch + snare/attack, on the source so it travels ----
+  // Two thirds of the boost goes to low punch, one third to attack crack.
+  const kick=c.createBiquadFilter();
+  kick.type='peaking'; kick.frequency.value=80; kick.Q.value=1.1; kick.gain.value=drumOn?drumBoost:0;
+  const snare=c.createBiquadFilter();
+  snare.type='peaking'; snare.frequency.value=3500; snare.Q.value=0.9; snare.gain.value=drumOn?drumBoost*0.5:0;
+  tuneOut.connect(kick); kick.connect(snare); tuneOut=snare;
+
+  // routing: input -> [tuning] -> [drum] -> bass -> ground -> lp -> lp2 -> hs -> [dry] + [pre->conv->wet] -> out
+  tuneOut.connect(bass); bass.connect(ground); ground.connect(lp); lp.connect(lp2); lp2.connect(hs);
+  hs.connect(dry); dry.connect(out);
+  hs.connect(pre); pre.connect(conv); conv.connect(wet); wet.connect(out);
+
+  let crowdNode=null, crowdGainNode=null;
+  // Constant bed plays only when no explicit regions are defined; once you set
+  // start/end regions, the crowd is driven by those instead (see scheduleCrowdRegions).
+  if(withCrowd && crowdOn && p.crowd>0.001 && crowdRegions.length===0){
+    const cb=Math.pow(10, crowdBoostDb/20);  // crowd boost multiplier
+    const bed = activeCrowd!=null ? crowdBeds.find(b=>b.id===activeCrowd) : null;
+    const cs=c.createBufferSource();
+    if(bed && bed.buffer){
+      cs.buffer=bed.buffer;        // selected crowd recording
+      cs.loop=true;
+      const cg=c.createGain(); cg.gain.value=p.crowd*1.6*cb; // real crowd needs more headroom
+      cs.connect(cg); cg.connect(out); crowdGainNode=cg;
+    }else{
+      cs.buffer=makeCrowd(c, Math.max(2, audioBuf.duration)); // synthetic fallback
+      cs.loop=true;
+      const cg=c.createGain(); cg.gain.value=p.crowd*cb;
+      const clp=c.createBiquadFilter(); clp.type='lowpass'; clp.frequency.value=2000;
+      cs.connect(clp); clp.connect(cg); cg.connect(out); crowdGainNode=cg;
+    }
+    crowdNode=cs;
+  }
+  return {input,out,lp,lp2,hs,bass,ground,conv,dry,wet,outGain:out,pre,crowdNode,crowdGainNode,kick,snare,eqNodes,baseCrowd:p.crowd};
+}
+
+/* ---------- schedule cheers into a chain on a given context ----------
+   startAt = the context-time the track playhead is at t=0. Each cheer plays
+   at startAt + its timestamp, fed into chain.input so it gets the full
+   tuning + distance treatment. Built-in kinds are synthesized on the spot;
+   uploaded clips use their decoded buffer. Returns the source nodes so the
+   caller can start/stop them (online) — offline starts them itself. */
+function scheduleCheers(c, chain, startAt){
+  const nodes=[];
+  cheers.forEach(ch=>{
+    const b = ch.buffer || synthCheer(c, ch.kind);
+    if(!b) return;
+    const s=c.createBufferSource(); s.buffer=b;
+    const g=c.createGain(); g.gain.value=ch.gain;
+    s.connect(g); g.connect(chain.input);
+    const when=startAt+ch.time;
+    try{ s.start(when); }catch(e){ try{s.start();}catch(_){} }
+    nodes.push(s);
+  });
+  return nodes;
+}
+
+/* ---------- schedule crowd regions into a chain ----------
+   A region plays a crowd bed looping across [start, end) on the track
+   timeline (end null = run to track end), fed through chain.input so it gets
+   the full distance + rig treatment. Short fades avoid clicks at the edges.
+   Uses the bed referenced by the region (or synthetic if missing). */
+function scheduleCrowdRegions(c, chain, startAt){
+  const nodes=[];
+  if(!crowdOn) return nodes;   // crowd master off — skip all region playback
+  const trackEnd = audioBuf ? audioBuf.duration : 0;
+  const p = paramsFor(+els.dist.value);
+  crowdRegions.forEach(r=>{
+    const start=Math.max(0, r.start);
+    const end = (r.end==null ? trackEnd : r.end);
+    if(end<=start) return;
+    const bed = r.bedId!=null ? crowdBeds.find(b=>b.id===r.bedId) : null;
+    const s=c.createBufferSource();
+    if(bed && bed.buffer){ s.buffer=bed.buffer; }
+    else { s.buffer=makeCrowd(c, Math.max(2, end-start)); }
+    s.loop=true;
+    const g=c.createGain();
+    const level=p.crowd*1.6*r.gain*Math.pow(10,crowdBoostDb/20); // distance × region gain × crowd boost
+    const t0=startAt+start, t1=startAt+end, fade=Math.min(0.05,(end-start)/4);
+    g.gain.setValueAtTime(0, t0);
+    g.gain.linearRampToValueAtTime(level, t0+fade);
+    g.gain.setValueAtTime(level, Math.max(t0+fade, t1-fade));
+    g.gain.linearRampToValueAtTime(0, t1);
+    s.connect(g); g.connect(chain.input);
+    try{ s.start(t0); s.stop(t1); }catch(e){ try{s.start();}catch(_){} }
+    nodes.push(s);
+  });
+  return nodes;
+}
+
+/* ---------- live preview ---------- */
+let cheerNodes=[], regionNodes=[];
+function startPreview(){
+  if(!audioBuf) return;
+  ctx = ctx || new (window.AudioContext||window.webkitAudioContext)();
+  ctx.resume();
+  srcNode=ctx.createBufferSource();
+  srcNode.buffer=audioBuf; srcNode.loop=true;
+  const p=paramsFor(+els.dist.value);
+  chain=buildChain(ctx,p,true);
+  srcNode.connect(chain.input);
+  chain.out.connect(ctx.destination);
+  previewStart=ctx.currentTime+0.06;
+  srcNode.start(previewStart);
+  if(chain.crowdNode) chain.crowdNode.start(previewStart);
+  cheerNodes=scheduleCheers(ctx, chain, previewStart); // fire each at its timestamp (first pass)
+  regionNodes=scheduleCrowdRegions(ctx, chain, previewStart); // crowd across start/end spans
+  playing=true; els.play.textContent='■ Stop';
+  srcNode.onended=()=>{};
+}
+function stopPreview(){
+  if(srcNode){try{srcNode.stop()}catch(e){}}
+  if(chain&&chain.crowdNode){try{chain.crowdNode.stop()}catch(e){}}
+  cheerNodes.forEach(n=>{try{n.stop()}catch(e){}});
+  regionNodes.forEach(n=>{try{n.stop()}catch(e){}});
+  cheerNodes=[]; regionNodes=[];
+  playing=false; els.play.textContent='▶ Preview';
+}
+
+/* live param update without restarting */
+function liveUpdate(){
+  if(!playing||!chain) return;
+  const p=paramsFor(+els.dist.value), t=ctx.currentTime, g=0.08;
+  chain.lp.frequency.linearRampToValueAtTime(p.lowpass,t+g);
+  chain.lp2.frequency.linearRampToValueAtTime(p.lowpass,t+g);
+  chain.hs.gain.linearRampToValueAtTime(p.highshelf,t+g);
+  chain.bass.gain.linearRampToValueAtTime(p.bassGain,t+g);
+  chain.ground.frequency.linearRampToValueAtTime(p.groundFreq,t+g);
+  chain.ground.gain.linearRampToValueAtTime(p.groundGain,t+g);
+  if(chain.eqNodes) chain.eqNodes.forEach((f,i)=>f.gain.linearRampToValueAtTime(eqGains[i],t+g));
+  chain.dry.gain.linearRampToValueAtTime(1-p.wet,t+g);
+  chain.wet.gain.linearRampToValueAtTime(p.wet,t+g);
+  chain.outGain.gain.linearRampToValueAtTime(p.gain,t+g);
+  chain.pre.delayTime.linearRampToValueAtTime(p.predelay,t+g);
+  // drum boost EQ (kick + half on snare)
+  if(chain.kick) chain.kick.gain.linearRampToValueAtTime(drumOn?drumBoost:0,t+g);
+  if(chain.snare) chain.snare.gain.linearRampToValueAtTime(drumOn?drumBoost*0.5:0,t+g);
+  // crowd boost on the constant bed (regions are scheduled, so they pick it up on rebuild)
+  if(chain.crowdGainNode){
+    const bed = activeCrowd!=null ? crowdBeds.find(b=>b.id===activeCrowd) : null;
+    const baseFactor = (bed && bed.buffer) ? 1.6 : 1;
+    const lvl = p.crowd*baseFactor*Math.pow(10,crowdBoostDb/20);
+    chain.crowdGainNode.gain.linearRampToValueAtTime(lvl,t+g);
+  }
+}
+
+/* ---------- offline render to WAV ---------- */
+async function render(){
+  els.render.disabled=true; els.render.textContent='Rendering…';
+  const p=paramsFor(+els.dist.value);
+  const tail=2.5;
+  // make sure a cheer near/after the end still fits (its time + ~4s clip + tail)
+  let latest=audioBuf.duration;
+  cheers.forEach(c=>{ latest=Math.max(latest, c.time+4); });
+  crowdRegions.forEach(r=>{ latest=Math.max(latest, r.end==null?audioBuf.duration:r.end); });
+  const totalSec=latest+tail;
+  const frames=Math.ceil(totalSec*audioBuf.sampleRate);
+  const oc=new OfflineAudioContext(2, frames, audioBuf.sampleRate);
+  const src=oc.createBufferSource(); src.buffer=audioBuf;
+  const ch=buildChain(oc,p,true);
+  src.connect(ch.input); ch.out.connect(oc.destination);
+  src.start(0);
+  if(ch.crowdNode) ch.crowdNode.start(0);
+  scheduleCheers(oc, ch, 0);        // cheers at their timestamps
+  scheduleCrowdRegions(oc, ch, 0);  // crowd across start/end spans
+  const rendered=await oc.startRendering();
+  const wav=encodeWAV(rendered);
+  const url=URL.createObjectURL(new Blob([wav],{type:'audio/wav'}));
+  const a=document.createElement('a');
+  a.href=url; a.download=fileName.replace(/\.[^.]+$/,'')+`_${els.dist.value}m.wav`;
+  a.click(); URL.revokeObjectURL(url);
+  els.render.textContent='Render & download'; els.render.disabled=false;
+}
+
+function encodeWAV(buf){
+  const nc=buf.numberOfChannels, len=buf.length, rate=buf.sampleRate;
+  const ab=new ArrayBuffer(44+len*nc*2), v=new DataView(ab);
+  const w=(o,s)=>{for(let i=0;i<s.length;i++)v.setUint8(o+i,s.charCodeAt(i))};
+  w(0,'RIFF'); v.setUint32(4,36+len*nc*2,true); w(8,'WAVE'); w(12,'fmt ');
+  v.setUint32(16,16,true); v.setUint16(20,1,true); v.setUint16(22,nc,true);
+  v.setUint32(24,rate,true); v.setUint32(28,rate*nc*2,true);
+  v.setUint16(32,nc*2,true); v.setUint16(34,16,true); w(36,'data');
+  v.setUint32(40,len*nc*2,true);
+  let off=44;
+  const chans=[]; for(let c=0;c<nc;c++) chans.push(buf.getChannelData(c));
+  for(let i=0;i<len;i++){
+    for(let c=0;c<nc;c++){
+      let s=Math.max(-1,Math.min(1,chans[c][i]));
+      v.setInt16(off, s<0?s*0x8000:s*0x7FFF, true); off+=2;
+    }
+  }
+  return ab;
+}
+
+/* ---------- field visual ---------- */
+function drawField(){
+  const d=+els.dist.value;
+  const x = 20 + Math.min(1, Math.log10(d/2)/Math.log10(400)) * 520;
+  els.listenerG.setAttribute('transform',`translate(${x},0)`);
+  // wavefronts
+  const n=4, frag=[];
+  for(let i=0;i<n;i++){
+    const r=20+i*((x-13)/n);
+    const op=(0.5*(1-i/n)).toFixed(2);
+    frag.push(`<ellipse cx="13" cy="60" rx="${r}" ry="${r*0.55}" fill="none" stroke="var(--stage)" stroke-width="1" opacity="${op}"/>`);
+  }
+  els.waves.innerHTML=frag.join('');
+}
+
+/* ---------- cheers: timestamp parsing + list management ---------- */
+function parseTime(str){
+  str=(str||'').trim();
+  if(!str) return null;
+  let sec;
+  if(str.includes(':')){
+    const parts=str.split(':').map(Number);
+    if(parts.some(isNaN)) return null;
+    sec = parts.length===3 ? parts[0]*3600+parts[1]*60+parts[2]
+        : parts[0]*60+parts[1];
+  }else{
+    sec=Number(str);
+  }
+  return (isNaN(sec)||sec<0) ? null : sec;
+}
+function fmtTime(sec){
+  const m=Math.floor(sec/60), s=(sec-m*60);
+  return `${m}:${s.toFixed(1).padStart(4,'0')}`;
+}
+
+function renderCheerList(){
+  cheers.sort((a,b)=>a.time-b.time);
+  els.cheerEmpty.style.display = cheers.length ? 'none' : '';
+  els.cheerList.innerHTML = cheers.map(c=>`
+    <div class="cheer-row" data-id="${c.id}">
+      <span class="ct">${fmtTime(c.time)}</span>
+      <span class="cn">${c.name}</span>
+      <span class="cg">
+        <input type="range" min="0" max="1.5" step="0.05" value="${c.gain}" data-id="${c.id}">
+        <span>${Math.round(c.gain*100)}%</span>
+      </span>
+      <button class="del" data-id="${c.id}" title="Remove">×</button>
+    </div>`).join('');
+}
+
+function addCheer(kind, name, buffer){
+  const time=parseTime(els.cheerTime.value);
+  if(time===null){ els.cheerTime.focus(); els.cheerTime.style.borderColor='var(--stage)'; return; }
+  els.cheerTime.style.borderColor='';
+  cheers.push({id:++cheerSeq, kind, name, time, gain:0.9, buffer:buffer||null});
+  renderCheerList();
+  if(playing){stopPreview();startPreview();} // reschedule so the new cheer is heard
+}
+
+// uploaded cheer clips become reusable options in the dropdown
+function refreshUploadedGroup(selectKey){
+  els.uploadedGroup.innerHTML = uploadedClips
+    .map(c=>`<option value="clip:${c.key}">${c.name}</option>`).join('');
+  els.uploadedGroup.label = uploadedClips.length ? 'Uploaded clips' : '';
+  els.uploadedGroup.style.display = uploadedClips.length ? '' : 'none';
+  if(selectKey) els.cheerKind.value=`clip:${selectKey}`;
+}
+
+/* ---------- WAV markers: show + import ---------- */
+function markerLabel(c, i){
+  return c.label ? c.label : `Marker ${i+1}`;
+}
+function renderMarkerBar(){
+  if(!audioBuf){ els.markersPanel.classList.add('hidden'); return; }
+  els.markersPanel.classList.remove('hidden');
+  const dur=audioBuf.duration;
+
+  // region markers = start of track + embedded cues + end of track
+  regionMarkers = [
+    {time:0, label:'Start of track', synthetic:true},
+    ...trackCues.map((c,i)=>({time:c.time, label:c.label||`Marker ${i+1}`})),
+    {time:dur, label:'End of track', synthetic:true}
+  ].sort((a,b)=>a.time-b.time);
+
+  // strip shows the embedded cues (the synthetic ones are just the edges)
+  els.markerStrip.innerHTML = trackCues.map((c,i)=>{
+    const pct=Math.max(0,Math.min(100,(c.time/dur)*100));
+    return `<span class="mk" style="left:${pct}%" title="${c.label||('Marker '+(i+1))} @ ${fmtTime(c.time)}"></span>`;
+  }).join('');
+
+  els.markerCount.textContent = trackCues.length
+    ? `${trackCues.length} embedded marker${trackCues.length>1?'s':''} found. Import them as one-shot cheers, or pick a start/end pair below to run a crowd bed across that span.`
+    : `No embedded markers in this file — but you can still run a crowd bed from start to end of track using the region controls below.`;
+
+  // cheer import only makes sense with real embedded cues
+  els.cheerImportRow.querySelector('#markerImport').disabled = trackCues.length===0;
+
+  // region selectors index into regionMarkers
+  const opts = regionMarkers.map((m,i)=>`<option value="${i}">${m.label} · ${fmtTime(m.time)}</option>`).join('');
+  els.regStart.innerHTML = opts;
+  els.regEnd.innerHTML = `<option value="end">— end of track —</option>` + opts;
+  els.regStart.value='0';        // start of track
+  els.regEnd.value='end';        // default: to end of track
+}
+
+function importMarkers(){
+  if(!trackCues.length) return;
+  const sound=els.markerSound.value;
+  trackCues.forEach((c,i)=>{
+    const name = (c.label?`${c.label} · `:'') + (CHEER_LABELS[sound]||sound);
+    cheers.push({id:++cheerSeq, kind:sound, name, time:c.time, gain:0.9, buffer:null});
+  });
+  renderCheerList();
+  if(playing){stopPreview();startPreview();}
+}
+
+/* ---------- crowd regions defined by start/end markers ---------- */
+function renderRegionList(){
+  els.regionList.innerHTML = crowdRegions.map(r=>{
+    const bed = r.bedId!=null ? crowdBeds.find(b=>b.id===r.bedId) : null;
+    const bedName = bed ? bed.name : 'Synthetic bed';
+    const endTxt = r.end==null ? 'end' : fmtTime(r.end);
+    return `
+    <div class="region-row" data-id="${r.id}">
+      <span class="rspan">${fmtTime(r.start)} → ${endTxt}</span>
+      <span class="rn">${bedName}</span>
+      <span class="cg">
+        <input type="range" min="0" max="1.5" step="0.05" value="${r.gain}" data-id="${r.id}">
+        <span>${Math.round(r.gain*100)}%</span>
+      </span>
+      <button class="del" data-id="${r.id}" title="Remove">×</button>
+    </div>`;
+  }).join('');
+}
+
+function addRegion(){
+  if(!regionMarkers.length || !audioBuf) return;
+  const si=+els.regStart.value;
+  const start = regionMarkers[si] ? regionMarkers[si].time : 0;
+  const ev=els.regEnd.value;
+  // "end" sentinel = run to end of track (stored as null so it tracks track length)
+  const end = ev==='end' ? null : (regionMarkers[+ev] ? regionMarkers[+ev].time : null);
+  const endResolved = end==null ? audioBuf.duration : end;
+  if(endResolved<=start){ els.regEnd.style.borderColor='var(--stage)'; return; }
+  els.regEnd.style.borderColor='';
+  crowdRegions.push({id:++regionSeq, bedId:activeCrowd, start, end, gain:1.0});
+  renderRegionList();
+  if(playing){stopPreview();startPreview();} // bed becomes region-driven now
+}
+
+/* ---------- file handling ---------- */
+function loadFile(f){
+  if(!f) return;
+  fileName=f.name;
+  const fr=new FileReader();
+  fr.onload=async e=>{
+    ctx = ctx || new (window.AudioContext||window.webkitAudioContext)();
+    const raw=e.target.result;
+    // parse cues from a copy first — decodeAudioData detaches the buffer
+    trackCues = parseWavCues(raw.slice(0));
+    try{
+      audioBuf=await ctx.decodeAudioData(raw);
+      els.loaded.classList.remove('hidden');
+      const cueNote = trackCues.length ? ` · <b>${trackCues.length} marker${trackCues.length>1?'s':''}</b> found` : '';
+      els.loaded.innerHTML=`Loaded <b>${fileName}</b> · ${audioBuf.duration.toFixed(1)}s · ${audioBuf.numberOfChannels}ch${cueNote}`;
+      els.controls.classList.remove('hidden');
+      els.play.disabled=false; els.render.disabled=false;
+      renderMarkerBar();
+      drawField();
+    }catch(err){
+      els.loaded.classList.remove('hidden');
+      els.loaded.innerHTML=`Couldn't decode that file. Try a wav or mp3.`;
+    }
+  };
+  fr.readAsArrayBuffer(f);
+}
+
+function renderBedList(){
+  const synthActive = activeCrowd==null;
+  let html = `
+    <div class="bed ${synthActive?'active':''}" data-bed="synth">
+      <span class="radio"></span>
+      <span class="bn">Synthetic bed</span>
+      <span class="bd">generated</span>
+    </div>`;
+  html += crowdBeds.map(b=>`
+    <div class="bed ${activeCrowd===b.id?'active':''}" data-bed="${b.id}">
+      <span class="radio"></span>
+      <span class="bn">${b.name}</span>
+      <span class="bd">${b.buffer.duration.toFixed(1)}s</span>
+      <button class="del" data-bed="${b.id}" title="Remove">×</button>
+    </div>`).join('');
+  els.bedList.innerHTML=html;
+}
+
+function loadCrowdFiles(files){
+  if(!files || !files.length) return;
+  ctx = ctx || new (window.AudioContext||window.webkitAudioContext)();
+  Array.from(files).forEach(f=>{
+    const fr=new FileReader();
+    fr.onload=async e=>{
+      try{
+        const buf=await ctx.decodeAudioData(e.target.result);
+        const id=++crowdSeq;
+        crowdBeds.push({id, name:f.name, buffer:buf});
+        if(activeCrowd==null) activeCrowd=id; // first real bed becomes active
+        renderBedList();
+        if(playing){stopPreview();startPreview();}
+      }catch(err){ /* skip undecodable file */ }
+    };
+    fr.readAsArrayBuffer(f);
+  });
+}
+
+/* ---------- events ---------- */
+els.file.addEventListener('change',e=>loadFile(e.target.files[0]));
+['dragover','dragenter'].forEach(ev=>els.drop.addEventListener(ev,e=>{e.preventDefault();els.drop.classList.add('over')}));
+['dragleave','drop'].forEach(ev=>els.drop.addEventListener(ev,e=>{e.preventDefault();els.drop.classList.remove('over')}));
+els.drop.addEventListener('drop',e=>loadFile(e.dataTransfer.files[0]));
+
+// crowd beds — multiple, one active at a time
+els.crowdOn.addEventListener('change',()=>{
+  crowdOn=els.crowdOn.checked;
+  els.crowdOnTxt.textContent = crowdOn ? 'Crowd on' : 'Crowd off';
+  // dim the bed/region controls when off (they don't do anything then)
+  els.dropCrowd.classList.toggle('crowd-off', !crowdOn);
+  els.bedList.classList.toggle('crowd-off', !crowdOn);
+  if(playing){stopPreview();startPreview();}
+});
+els.fileCrowd.addEventListener('change',e=>{ loadCrowdFiles(e.target.files); els.fileCrowd.value=''; });
+['dragover','dragenter'].forEach(ev=>els.dropCrowd.addEventListener(ev,e=>{e.preventDefault();els.dropCrowd.classList.add('over')}));
+['dragleave','drop'].forEach(ev=>els.dropCrowd.addEventListener(ev,e=>{e.preventDefault();els.dropCrowd.classList.remove('over')}));
+els.dropCrowd.addEventListener('drop',e=>loadCrowdFiles(e.dataTransfer.files));
+els.bedList.addEventListener('click',e=>{
+  const del=e.target.closest('.del');
+  if(del){
+    e.stopPropagation();
+    const id=+del.dataset.bed;
+    crowdBeds=crowdBeds.filter(b=>b.id!==id);
+    if(activeCrowd===id) activeCrowd = crowdBeds.length ? crowdBeds[0].id : null;
+    renderBedList();
+    if(playing){stopPreview();startPreview();}
+    return;
+  }
+  const row=e.target.closest('.bed'); if(!row) return;
+  activeCrowd = row.dataset.bed==='synth' ? null : +row.dataset.bed;
+  renderBedList();
+  if(playing){stopPreview();startPreview();}
+});
+
+// cheers
+els.cheerKind.addEventListener('change',()=>{
+  if(els.cheerKind.value==='__upload__'){ els.cheerFile.click(); }
+});
+els.cheerAdd.addEventListener('click',()=>{
+  const val=els.cheerKind.value;
+  if(val==='__upload__'){ els.cheerFile.click(); return; }
+  if(val.startsWith('clip:')){
+    const key=val.slice(5);
+    const clip=uploadedClips.find(c=>c.key===key);
+    if(!clip) return;
+    addCheer('upload', clip.name, clip.buffer);
+  }else{
+    addCheer(val, CHEER_LABELS[val]||val, null);
+  }
+});
+els.cheerFile.addEventListener('change',e=>{
+  const f=e.target.files[0];
+  els.cheerFile.value='';
+  if(!f){ els.cheerKind.value='roar'; return; } // cancelled picker
+  const fr=new FileReader();
+  fr.onload=async ev=>{
+    ctx = ctx || new (window.AudioContext||window.webkitAudioContext)();
+    try{
+      const buf=await ctx.decodeAudioData(ev.target.result);
+      const key='u'+(++cheerSeq);
+      uploadedClips.push({key, name:f.name, buffer:buf});
+      refreshUploadedGroup(key);  // store + select it; user sets time then clicks Add
+    }catch(err){ alert("Couldn't decode that clip. Try a wav or mp3."); els.cheerKind.value='roar'; }
+  };
+  fr.readAsArrayBuffer(f);
+});
+els.cheerTime.addEventListener('keydown',e=>{ if(e.key==='Enter') els.cheerAdd.click(); });
+els.cheerList.addEventListener('click',e=>{
+  const btn=e.target.closest('.del'); if(!btn) return;
+  const id=+btn.dataset.id;
+  cheers=cheers.filter(c=>c.id!==id);
+  renderCheerList();
+  if(playing){stopPreview();startPreview();}
+});
+els.cheerList.addEventListener('input',e=>{
+  if(e.target.type!=='range') return;
+  const id=+e.target.dataset.id;
+  const c=cheers.find(x=>x.id===id); if(!c) return;
+  c.gain=+e.target.value;
+  e.target.nextElementSibling.textContent=Math.round(c.gain*100)+'%';
+  if(playing){stopPreview();startPreview();}
+});
+
+// markers
+els.markerImport.addEventListener('click', importMarkers);
+els.regionAdd.addEventListener('click', addRegion);
+els.markerMode.addEventListener('click',e=>{
+  const btn=e.target.closest('.mm'); if(!btn) return;
+  els.markerMode.querySelectorAll('.mm').forEach(b=>b.classList.toggle('active',b===btn));
+  const crowd = btn.dataset.mode==='crowd';
+  els.cheerImportRow.classList.toggle('hidden', crowd);
+  els.regionAddRow.classList.toggle('hidden', !crowd);
+});
+els.regionList.addEventListener('click',e=>{
+  const btn=e.target.closest('.del'); if(!btn) return;
+  const id=+btn.dataset.id;
+  crowdRegions=crowdRegions.filter(r=>r.id!==id);
+  renderRegionList();
+  if(playing){stopPreview();startPreview();}
+});
+els.regionList.addEventListener('input',e=>{
+  if(e.target.type!=='range') return;
+  const id=+e.target.dataset.id;
+  const r=crowdRegions.find(x=>x.id===id); if(!r) return;
+  r.gain=+e.target.value;
+  e.target.nextElementSibling.textContent=Math.round(r.gain*100)+'%';
+  if(playing){stopPreview();startPreview();}
+});
+
+els.dist.addEventListener('input',()=>{
+  const d=+els.dist.value;
+  els.distNum.textContent=d;
+  els.zoneTag.innerHTML=zone(d);
+  drawField();
+  liveUpdate();
+});
+
+// PA level — live via output gain, no rebuild needed
+els.pa.addEventListener('input',()=>{
+  paLevel=+els.pa.value;
+  els.paVal.textContent=`${paLevel} dB SPL`;
+  liveUpdate();
+});
+
+// drum boost — live EQ ramp, value shown on the readout
+els.drum.addEventListener('input',()=>{
+  drumBoost=+els.drum.value;
+  els.drumVal.textContent=`${drumBoost>0?'+':''}${drumBoost} dB`;
+  liveUpdate();
+});
+els.drumOn.addEventListener('change',()=>{
+  drumOn=els.drumOn.checked;
+  els.drum.closest('.boost').classList.toggle('dim', !drumOn);
+  liveUpdate();
+});
+// input 5-band EQ
+for(let i=0;i<5;i++){
+  const sl=document.getElementById('eq'+i), vl=document.getElementById('eq'+i+'v');
+  if(sl) sl.addEventListener('input',()=>{
+    eqGains[i]=+sl.value;
+    vl.textContent=(eqGains[i]>0?'+':'')+eqGains[i];
+    liveUpdate();
+  });
+}
+// crowd boost — live on the constant bed; rebuild on release so regions update too
+els.crowdBoost.addEventListener('input',()=>{
+  crowdBoostDb=+els.crowdBoost.value;
+  els.crowdBoostVal.textContent=`${crowdBoostDb>0?'+':''}${crowdBoostDb} dB`;
+  liveUpdate();
+});
+els.crowdBoost.addEventListener('change',()=>{
+  if(playing && crowdRegions.length){ stopPreview(); startPreview(); }
+});
+
+// Speaker tuning — changes EQ nodes, so rebuild the graph if playing
+els.tunes.addEventListener('click',e=>{
+  const btn=e.target.closest('.tune'); if(!btn) return;
+  tuneId=btn.dataset.tune;
+  els.tunes.querySelectorAll('.tune').forEach(b=>b.classList.toggle('active',b===btn));
+  els.tuneDesc.textContent=TUNINGS[tuneId].desc;
+  if(playing){stopPreview();startPreview();}
+});
+
+els.play.addEventListener('click',()=>{ playing?stopPreview():startPreview(); });
+els.render.addEventListener('click',render);
+
+renderBedList();
+refreshUploadedGroup();
+drawField();
+</script>
+</body>
+</html>

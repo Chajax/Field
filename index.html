@@ -202,6 +202,7 @@
   .env-v{font-family:'Archivo Expanded',sans-serif;font-weight:600;font-size:12px;color:var(--glow)}
   .env input[type=range]{width:100%}
   .env-note{font-size:11px;color:var(--ink-dim);margin-top:14px;line-height:1.5}
+  .env-weather .env-top span:first-child{color:var(--glow)}
   .cheer-add{display:flex;gap:7px;margin-bottom:12px;flex-wrap:wrap}
   .cheer-add select,.cheer-add input[type=text]{
     font-family:'Spline Sans Mono';font-size:12px;padding:9px 10px;border-radius:7px;
@@ -465,6 +466,24 @@
           <input type="range" id="gust" min="0" max="100" value="0" step="1">
           <div class="scale"><span>steady</span><span>gusty · wandering</span></div>
         </div>
+
+        <div class="env env-weather">
+          <div class="env-top"><span>Wind noise</span><span class="env-v" id="windNoiseV">0%</span></div>
+          <input type="range" id="windNoise" min="0" max="100" value="0" step="1">
+          <div class="scale"><span>silent</span><span>howling · scales with wind</span></div>
+        </div>
+
+        <div class="env env-weather">
+          <div class="env-top"><span>Rain</span><span class="env-v" id="rainV">0%</span></div>
+          <input type="range" id="rain" min="0" max="100" value="0" step="1">
+          <div class="scale"><span>dry</span><span>downpour</span></div>
+        </div>
+
+        <div class="env env-weather">
+          <div class="env-top"><span>Thunderstorm</span><span class="env-v" id="thunderV">off</span></div>
+          <input type="range" id="thunder" min="0" max="100" value="0" step="1">
+          <div class="scale"><span>off · distant</span><span>overhead · frequent</span></div>
+        </div>
       </div>
       <div class="env-note" id="envNote">Still, mild air. Move the controls to reshape how the field carries the sound.</div>
     </div>
@@ -544,6 +563,11 @@ let envWindDir   = 0;     // degrees: 0 = downwind (toward listener), 180 = upwi
 let envGust      = 0;     // 0..100 % turbulence
 let gustPhase    = 0;     // running phase for gust modulation
 let gustTimer    = null;  // interval that animates gusts during preview
+// weather sound beds
+let envWindNoise = 0;     // 0..100 % wind noise level (also scales with wind speed)
+let envRain      = 0;     // 0..100 % rain intensity
+let envThunder   = 0;     // 0..100 % thunderstorm activity (0 = off)
+let thunderTimer = null;  // schedules thunder claps
 let inAnalyser=null, outAnalyser=null, visualRAF=null; // waveform + particle analysers
 const EQ_FREQS=[80,250,1000,4000,10000];
 const EQ_TYPES=['lowshelf','peaking','peaking','peaking','highshelf'];
@@ -762,11 +786,14 @@ function paramsFor(d){
     lowpass: lp*gustLp,
     highshelf,
     highshelfFreq: 3500,
-    bassGain: 7 * n,
+    // bass only lifts once highs start being absorbed (negligible <~40m)
+    bassGain: 7 * Math.pow(Math.max(0,(n-0.25)/0.75), 1.5),
     bassFreq: 90,
     groundFreq: 500 - 200*gN,
     groundGain: notchDepth,
-    wet: Math.min(0.78, 0.10 + 0.65*n + dens*0.08),  // denser crowd = a bit more diffuse
+    // direct field dominates near the source; reverb onsets late (quadratic).
+    // ~3% wet at 10m instead of 31% — outdoors has no walls to fill in early.
+    wet: Math.min(0.6, 0.02 + 0.6*Math.pow(n,2.2) + dens*0.05),
     gain,
     crowd: Math.min(0.45, 0.04 + 0.4*n + dens*0.12),
     predelay: Math.min(0.09, d/3430)
@@ -807,6 +834,117 @@ function makeCrowd(ctx, seconds){
     b2=0.57000*b2+w*1.0526913;
     ch[i]=(b0+b1+b2+w*0.1848)*0.05;
   }
+  return buf;
+}
+
+/* ---------- weather sound beds ---------- */
+// Wind: low brown-noise rumble + a slowly wandering band-passed "whistle".
+function makeWind(ctx, seconds){
+  const rate=ctx.sampleRate, len=Math.floor(rate*seconds);
+  const buf=ctx.createBuffer(1,len,rate);
+  const ch=buf.getChannelData(0);
+  let last=0;
+  for(let i=0;i<len;i++){
+    const w=Math.random()*2-1;
+    last=(last+0.02*w)/1.02;          // brown noise (integrated)
+    ch[i]=last*3.5;
+  }
+  return buf;
+}
+
+// Rain: dense hiss (many drops) — white noise we'll bandpass; the patter comes
+// from amplitude texture. Returns a seamless loopable buffer.
+function makeRain(ctx, seconds){
+  const rate=ctx.sampleRate, len=Math.floor(rate*seconds);
+  const buf=ctx.createBuffer(1,len,rate);
+  const ch=buf.getChannelData(0);
+  for(let i=0;i<len;i++){
+    // base hiss
+    let s=(Math.random()*2-1)*0.5;
+    // sparse brighter droplets give it a "patter" texture
+    if(Math.random()<0.004) s+=(Math.random()*2-1)*0.9;
+    ch[i]=s;
+  }
+  return buf;
+}
+
+// One thunder clap: a low rumble swell with an initial crack, decaying over ~secs.
+// Realistic thunder. Real thunder isn't one burst: acoustic energy arrives from
+// along the whole lightning channel, so it's a SEQUENCE of cracks and rolls over
+// several seconds, dominated by heavily low-passed sub-bass with irregular,
+// lumpy amplitude (the "rolling"). `intensity` 0..1 morphs distant->close:
+//  distant = slow build, pure low rumble, no crack;
+//  close   = sharp ripping crack up front, then a long rumble.
+function makeThunderClap(ctx, secs, intensity){
+  intensity = intensity==null ? 0.6 : Math.max(0,Math.min(1,intensity));
+  const rate=ctx.sampleRate, len=Math.floor(rate*secs);
+  const buf=ctx.createBuffer(1,len,rate);
+  const ch=buf.getChannelData(0);
+
+  // cascaded one-pole lowpasses -> steep rolloff for the deep rumble body
+  let l1=0,l2=0,l3=0;
+  // a few resonant sub tones give the rumble a "body" pitch that wanders
+  const sub1=38+Math.random()*14, sub2=70+Math.random()*30;
+
+  // build an irregular sequence of "arrival" bursts along the channel.
+  // closer strikes get a strong early crack; all get scattered rumble peaks.
+  const bursts=[];
+  // initial crack (only prominent when close)
+  bursts.push({t:0.0, amp:0.4+intensity*1.4, sharp:0.85*intensity+0.05});
+  const nRolls=4+Math.floor(Math.random()*5);
+  for(let k=0;k<nRolls;k++){
+    bursts.push({
+      t: 0.15 + Math.random()*secs*0.75,           // scattered through the roll
+      amp: (0.3+Math.random()*0.9)*(0.6+intensity*0.6),
+      sharp: 0.02+Math.random()*0.12               // rolls are soft, not sharp
+    });
+  }
+
+  // slow overall swell+decay envelope; distant strikes build more gently
+  const attack = 0.04 + (1-intensity)*0.5;          // seconds to peak
+
+  for(let i=0;i<len;i++){
+    const t=i/rate;
+    // white source for this sample
+    const w=Math.random()*2-1;
+
+    // sum burst envelopes -> drives both crack content and rumble loudness
+    let crack=0, drive=0;
+    for(const b of bursts){
+      const dt=t-b.t;
+      if(dt<0) continue;
+      const sharpEnv=Math.exp(-dt*(60-50*b.sharp)); // sharp bursts decay fast
+      const bodyEnv=Math.exp(-dt*2.2);
+      crack += w*sharpEnv*b.sharp*b.amp;
+      drive += bodyEnv*b.amp;
+    }
+
+    // overall swell (gentle build for distant, immediate for close) * long decay
+    const swell=Math.min(1, t/attack);
+    const tail=Math.exp(-t*(0.7+0.5*(1-intensity)));
+    const ampEnv=swell*tail;
+
+    // heavily lowpassed rumble, amplitude shaped by the rolling burst drive
+    const target=w*(0.7+drive);
+    l1=l1*0.93+target*0.07;
+    l2=l2*0.93+l1*0.07;
+    l3=l3*0.90+l2*0.10;
+    let rumble=l3*8.0;
+
+    // wandering sub-bass body
+    const body=(Math.sin(2*Math.PI*sub1*t)*0.6+Math.sin(2*Math.PI*sub2*t)*0.3)
+               * (0.4+drive*0.5) * Math.exp(-t*1.2);
+
+    // close strikes keep some mid "rip"; distant ones almost none
+    const rip = crack * (0.3+0.7*intensity);
+
+    ch[i]=(rumble*ampEnv + body*ampEnv + rip) * 0.5;
+  }
+
+  // normalise to avoid clipping while keeping dynamics
+  let peak=1e-6; for(let i=0;i<len;i++) peak=Math.max(peak,Math.abs(ch[i]));
+  const g=0.9/peak;
+  for(let i=0;i<len;i++) ch[i]*=g;
   return buf;
 }
 
@@ -897,7 +1035,37 @@ function buildChain(c, p, withCrowd){
     }
     crowdNode=cs;
   }
-  return {input,out,lp,lp2,hs,bass,ground,conv,dry,wet,outGain:out,pre,crowdNode,crowdGainNode,kick,snare,eqNodes,baseCrowd:p.crowd};
+
+  // ---- weather beds: wind noise + rain (loop continuously, like the crowd) ----
+  let windNode=null, windGain=null, rainNode=null, rainGain=null;
+  if(withCrowd){
+    const dur=Math.max(2, audioBuf?audioBuf.duration:4);
+    // wind noise: scales with wind speed AND the wind-noise control. Brighter +
+    // louder as it blows harder; gusts add movement (handled in liveUpdate).
+    const windAmt=(envWindNoise/100) * (0.25 + envWindSpeed/20*0.9);
+    if(windAmt>0.001){
+      const wn=c.createBufferSource(); wn.buffer=makeWind(c,dur); wn.loop=true;
+      const wlp=c.createBiquadFilter(); wlp.type='lowpass';
+      wlp.frequency.value=300 + envWindSpeed*120;   // faster wind = more HF "rush"
+      const wbp=c.createBiquadFilter(); wbp.type='bandpass';
+      wbp.frequency.value=500 + envWindSpeed*80; wbp.Q.value=0.6; // whistle band
+      const wg=c.createGain(); wg.gain.value=windAmt;
+      wn.connect(wlp); wlp.connect(wbp); wbp.connect(wg); wg.connect(out);
+      windNode=wn; windGain=wg;
+    }
+    // rain: dense bandpassed hiss, intensity = envRain. Heavier rain = louder,
+    // a touch brighter. Goes through distance 'out' so far rain is duller.
+    if(envRain>0.001){
+      const rn=c.createBufferSource(); rn.buffer=makeRain(c,dur); rn.loop=true;
+      const rhp=c.createBiquadFilter(); rhp.type='highpass'; rhp.frequency.value=800;
+      const rlp=c.createBiquadFilter(); rlp.type='lowpass';
+      rlp.frequency.value=3000 + (envRain/100)*5000;
+      const rg=c.createGain(); rg.gain.value=(envRain/100)*0.5;
+      rn.connect(rhp); rhp.connect(rlp); rlp.connect(rg); rg.connect(out);
+      rainNode=rn; rainGain=rg;
+    }
+  }
+  return {input,out,lp,lp2,hs,bass,ground,conv,dry,wet,outGain:out,pre,crowdNode,crowdGainNode,kick,snare,eqNodes,windNode,windGain,rainNode,rainGain,baseCrowd:p.crowd};
 }
 
 /* ---------- schedule cheers into a chain on a given context ----------
@@ -974,17 +1142,58 @@ function startPreview(){
   previewStart=ctx.currentTime+0.06;
   srcNode.start(previewStart);
   if(chain.crowdNode) chain.crowdNode.start(previewStart);
+  if(chain.windNode) chain.windNode.start(previewStart);
+  if(chain.rainNode) chain.rainNode.start(previewStart);
   cheerNodes=scheduleCheers(ctx, chain, previewStart); // fire each at its timestamp (first pass)
   regionNodes=scheduleCrowdRegions(ctx, chain, previewStart); // crowd across start/end spans
   playing=true; els.play.textContent='■ Stop';
   startVisuals();
   if(gustTimer) clearInterval(gustTimer);
-  gustTimer=setInterval(()=>{ if(playing && (envGust>0)) liveUpdate(); }, 90);
+  gustTimer=setInterval(()=>{ if(playing && (envGust>0 || envWindNoise>0)) liveUpdate(); }, 90);
+  startThunder();
   srcNode.onended=()=>{};
 }
+
+// Thunder: fire claps at random intervals; rate + loudness scale with intensity.
+function scheduleNextThunder(){
+  if(!playing || envThunder<=0){ thunderTimer=null; return; }
+  const intensity=envThunder/100;
+  // higher intensity -> shorter gaps (3s..25s)
+  const gap=(3 + (1-intensity)*22) * (0.5+Math.random());
+  thunderTimer=setTimeout(()=>{
+    if(playing && envThunder>0 && chain){
+      fireThunder(intensity);
+    }
+    scheduleNextThunder();
+  }, gap*1000);
+}
+function startThunder(){
+  if(thunderTimer){ clearTimeout(thunderTimer); thunderTimer=null; }
+  if(envThunder>0) scheduleNextThunder();
+}
+function fireThunder(intensity){
+  try{
+    const clap=ctx.createBufferSource();
+    // closer storm = shorter, sharper; distant = longer, slow rolling
+    const dur = 4 + (1-intensity)*5 + Math.random()*2;
+    clap.buffer=makeThunderClap(ctx, dur, intensity);
+    const g=ctx.createGain();
+    g.gain.value=(0.4+intensity*0.8);
+    // thunder rolls in from a distance: lowpass + reverb. Distant = darker + wetter.
+    const lp=ctx.createBiquadFilter(); lp.type='lowpass';
+    lp.frequency.value=350 + intensity*2200; // closer storm = brighter crack
+    clap.connect(lp); lp.connect(g); g.connect(chain.out);
+    if(chain.pre){ const ts=ctx.createGain(); ts.gain.value=0.3+(1-intensity)*0.4; lp.connect(ts); ts.connect(chain.pre); }
+    clap.start();
+  }catch(e){}
+}
+
 function stopPreview(){
   if(srcNode){try{srcNode.stop()}catch(e){}}
   if(chain&&chain.crowdNode){try{chain.crowdNode.stop()}catch(e){}}
+  if(chain&&chain.windNode){try{chain.windNode.stop()}catch(e){}}
+  if(chain&&chain.rainNode){try{chain.rainNode.stop()}catch(e){}}
+  if(thunderTimer){ clearTimeout(thunderTimer); thunderTimer=null; }
   cheerNodes.forEach(n=>{try{n.stop()}catch(e){}});
   regionNodes.forEach(n=>{try{n.stop()}catch(e){}});
   cheerNodes=[]; regionNodes=[];
@@ -1182,6 +1391,12 @@ function liveUpdate(){
     const lvl = p.crowd*baseFactor*Math.pow(10,crowdBoostDb/20);
     chain.crowdGainNode.gain.linearRampToValueAtTime(lvl,t+g);
   }
+  // wind noise gusts: level wobbles with the same turbulence phase as the air
+  if(chain.windGain){
+    const baseWind=(envWindNoise/100)*(0.25+envWindSpeed/20*0.9);
+    const gustMod=1 + (envGust/100)*0.8*Math.sin(gustPhase*1.1);
+    chain.windGain.gain.linearRampToValueAtTime(Math.max(0,baseWind*gustMod),t+g);
+  }
 }
 
 /* ---------- offline render to WAV ---------- */
@@ -1201,6 +1416,24 @@ async function render(){
   src.connect(ch.input); ch.out.connect(oc.destination);
   src.start(0);
   if(ch.crowdNode) ch.crowdNode.start(0);
+  if(ch.windNode) ch.windNode.start(0);
+  if(ch.rainNode) ch.rainNode.start(0);
+  // offline thunder: pre-schedule claps across the render at the chosen rate
+  if(envThunder>0){
+    const intensity=envThunder/100;
+    let tt=1+Math.random()*3;
+    while(tt<totalSec-1){
+      const dur=4+(1-intensity)*5+Math.random()*2;
+      const clap=oc.createBufferSource();
+      clap.buffer=makeThunderClap(oc, dur, intensity);
+      const g=oc.createGain(); g.gain.value=0.4+intensity*0.8;
+      const lp=oc.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=350+intensity*2200;
+      clap.connect(lp); lp.connect(g); g.connect(ch.out);
+      if(ch.pre){ const ts=oc.createGain(); ts.gain.value=0.3+(1-intensity)*0.4; lp.connect(ts); ts.connect(ch.pre); }
+      clap.start(tt);
+      tt += (3 + (1-intensity)*22) * (0.5+Math.random());
+    }
+  }
   scheduleCheers(oc, ch, 0);        // cheers at their timestamps
   scheduleCrowdRegions(oc, ch, 0);  // crowd across start/end spans
   const rendered=await oc.startRendering();
@@ -1672,6 +1905,29 @@ bindEnv('dens',    v=>envDensity=v,  v=> v+'%' );
 bindEnv('wind',    v=>envWindSpeed=v,v=> v+' m/s' );
 bindEnv('windDir', v=>envWindDir=v,  v=> windDirLabel(v) );
 bindEnv('gust',    v=>envGust=v,     v=> v+'%' );
+// weather sound beds: changing these adds/removes audio nodes, so rebuild
+function rebuildPreview(){
+  if(!playing) return;
+  const wasPlaying=true;
+  stopPreview();
+  startPreview();
+}
+function bindWeather(id, fn, fmt){
+  const sl=document.getElementById(id), vl=document.getElementById(id+'V');
+  if(!sl) return;
+  let rebuildT=null;
+  sl.addEventListener('input',()=>{
+    fn(+sl.value);
+    if(vl&&fmt) vl.textContent=fmt(+sl.value);
+    updateEnvNote();
+    // debounce rebuilds so dragging stays smooth
+    if(rebuildT) clearTimeout(rebuildT);
+    rebuildT=setTimeout(rebuildPreview, 140);
+  });
+}
+bindWeather('windNoise', v=>envWindNoise=v, v=> v+'%' );
+bindWeather('rain',      v=>envRain=v,      v=> v+'%' );
+bindWeather('thunder',   v=>envThunder=v,   v=> v<=0?'off':v+'%' );
 updateEnvNote();
 
 els.crowdBoost.addEventListener('input',()=>{

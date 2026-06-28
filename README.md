@@ -1,2 +1,2 @@
-# Field.github.io
+# Field
 Web audio festival distance simulator

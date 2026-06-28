@@ -114,15 +114,42 @@
 
   .rig{margin-top:22px;padding-top:18px;border-top:1px solid var(--line)}
   .eq{margin-top:22px;padding-top:18px;border-top:1px solid var(--line)}
-  .eq-bands{display:flex;justify-content:space-around;align-items:flex-end;gap:8px;margin-top:14px}
-  .eq-band{display:flex;flex-direction:column;align-items:center;gap:7px;flex:1}
-  .eq-slot{height:120px;width:24px;display:flex;align-items:center;justify-content:center}
-  .eq-slider{-webkit-appearance:none;appearance:none;width:120px;height:6px;transform:rotate(-90deg);
-    background:var(--line);border-radius:4px;outline:none;cursor:pointer}
-  .eq-slider::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:16px;height:20px;border-radius:3px;background:var(--ink);border:2px solid var(--stage);cursor:pointer}
-  .eq-slider::-moz-range-thumb{width:16px;height:20px;border-radius:3px;background:var(--ink);border:2px solid var(--stage);cursor:pointer}
-  .eq-val{font-family:'Archivo Expanded',sans-serif;font-weight:600;font-size:12px;color:var(--glow);min-height:14px}
-  .eq-lbl{font-size:10px;color:var(--ink-dim);letter-spacing:.05em}
+  .eq-bands{display:flex;justify-content:space-between;align-items:flex-start;gap:4px;margin-top:18px}
+  /* scale aligns to the slider's 220px height, with a half-thumb (11px) inset
+     top & bottom so labels match the thumb-centre travel */
+  .eq-scale{position:relative;height:220px;font-size:9px;color:var(--ink-dim);text-align:right;min-width:26px}
+  .eq-scale span{position:absolute;right:0;transform:translateY(-50%);line-height:1}
+  .eq-scale span:nth-child(1){top:11px}    /* +18 */
+  .eq-scale span:nth-child(2){top:60.5px}  /* +9  */
+  .eq-scale span:nth-child(3){top:110px}   /*  0  */
+  .eq-scale span:nth-child(4){top:159.5px} /* -9  */
+  .eq-scale span:nth-child(5){top:209px}   /* -18 */
+  .eq-band{display:flex;flex-direction:column;align-items:center;gap:8px;flex:1}
+  /* custom slider: the slot is the track; thumb + fill are positioned by JS.
+     Track centre line (0 dB) is the vertical middle. Thumb centre travels
+     11px..209px (half-thumb inset top & bottom of the 220px slot). */
+  .eq-slot{height:220px;width:34px;position:relative;cursor:pointer;touch-action:none}
+  /* track */
+  .eq-slot::before{content:'';position:absolute;left:50%;top:11px;height:198px;width:8px;
+    transform:translateX(-50%);border-radius:4px;background:var(--line);pointer-events:none}
+  /* gridlines every 9 dB (49.5px), brighter orange at 0 dB centre */
+  .eq-slot::after{content:'';position:absolute;left:50%;top:11px;height:198px;width:18px;
+    transform:translateX(-50%);pointer-events:none;opacity:.6;
+    background:
+      linear-gradient(var(--stage),var(--stage)) center top 99px,
+      repeating-linear-gradient(var(--ink-dim) 0 1px, transparent 1px 49.5px);
+    background-size:18px 1.5px, 18px 100%;
+    background-position:center top 99px, top;
+    background-repeat:no-repeat, repeat-y}
+  .eq-fill{position:absolute;left:50%;width:8px;transform:translateX(-50%);
+    background:var(--stage);border-radius:4px;pointer-events:none;z-index:1}
+  .eq-thumb{position:absolute;left:50%;width:22px;height:16px;
+    transform:translate(-50%,-50%);border-radius:4px;background:var(--ink);
+    border:2px solid var(--stage);box-shadow:0 0 8px rgba(255,94,58,.4);
+    pointer-events:none;z-index:2}
+  .eq-val{font-family:'Archivo Expanded',sans-serif;font-weight:600;font-size:13px;color:var(--glow);min-height:16px}
+  .eq-lbl{font-size:11px;color:var(--ink-dim);letter-spacing:.05em}
+  .eq-hint{font-size:10px;color:var(--ink-dim);margin-top:12px;text-align:center}
   .rig-head{font-size:10px;letter-spacing:.25em;text-transform:uppercase;color:var(--ink-dim);margin-bottom:16px}
   .pa-top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:2px}
   .pa-label{font-size:12px;color:var(--ink)}
@@ -284,32 +311,34 @@
     <div class="eq">
       <div class="rig-head">Input EQ — shapes the source before distance</div>
       <div class="eq-bands">
+        <div class="eq-scale"><span>+18</span><span>+9</span><span>0</span><span>−9</span><span>−18</span></div>
         <div class="eq-band">
-          <div class="eq-slot"><input type="range" class="eq-slider" id="eq0" min="-18" max="18" value="0" step="0.5"></div>
+          <div class="eq-slot" id="eq0" data-i="0"><div class="eq-fill"></div><div class="eq-thumb"></div></div>
           <span class="eq-val" id="eq0v">0</span>
           <span class="eq-lbl">80</span>
         </div>
         <div class="eq-band">
-          <div class="eq-slot"><input type="range" class="eq-slider" id="eq1" min="-18" max="18" value="0" step="0.5"></div>
+          <div class="eq-slot" id="eq1" data-i="1"><div class="eq-fill"></div><div class="eq-thumb"></div></div>
           <span class="eq-val" id="eq1v">0</span>
           <span class="eq-lbl">250</span>
         </div>
         <div class="eq-band">
-          <div class="eq-slot"><input type="range" class="eq-slider" id="eq2" min="-18" max="18" value="0" step="0.5"></div>
+          <div class="eq-slot" id="eq2" data-i="2"><div class="eq-fill"></div><div class="eq-thumb"></div></div>
           <span class="eq-val" id="eq2v">0</span>
           <span class="eq-lbl">1k</span>
         </div>
         <div class="eq-band">
-          <div class="eq-slot"><input type="range" class="eq-slider" id="eq3" min="-18" max="18" value="0" step="0.5"></div>
+          <div class="eq-slot" id="eq3" data-i="3"><div class="eq-fill"></div><div class="eq-thumb"></div></div>
           <span class="eq-val" id="eq3v">0</span>
           <span class="eq-lbl">4k</span>
         </div>
         <div class="eq-band">
-          <div class="eq-slot"><input type="range" class="eq-slider" id="eq4" min="-18" max="18" value="0" step="0.5"></div>
+          <div class="eq-slot" id="eq4" data-i="4"><div class="eq-fill"></div><div class="eq-thumb"></div></div>
           <span class="eq-val" id="eq4v">0</span>
           <span class="eq-lbl">10k</span>
         </div>
       </div>
+      <div class="eq-hint">Drag or click · double-click to reset to 0</div>
     </div>
 
     <div class="rig">
@@ -1239,14 +1268,54 @@ els.drumOn.addEventListener('change',()=>{
   els.drum.closest('.boost').classList.toggle('dim', !drumOn);
   liveUpdate();
 });
-// input 5-band EQ
+// input 5-band EQ — custom pointer-driven vertical sliders (no native range
+// quirks). Geometry: slot is 220px tall, thumb-centre travels 11px..209px.
+const EQ_TOP=11, EQ_BOT=209, EQ_SPAN=EQ_BOT-EQ_TOP; // px positions of +18 / -18
+function eqValToY(v){ return EQ_TOP + (18 - v)/36 * EQ_SPAN; }      // dB -> px from slot top
+function eqYToVal(y){ return 18 - (y - EQ_TOP)/EQ_SPAN * 36; }      // px -> dB
+
+function renderEq(slot, i){
+  const v = eqGains[i];
+  const y = eqValToY(v);
+  const thumb = slot.querySelector('.eq-thumb');
+  const fill  = slot.querySelector('.eq-fill');
+  const vl    = document.getElementById('eq'+i+'v');
+  thumb.style.top = y+'px';
+  // fill from centre (0 dB, y=110) to the thumb
+  const cy = eqValToY(0);
+  const top = Math.min(cy, y), h = Math.abs(y - cy);
+  fill.style.top = top+'px';
+  fill.style.height = h+'px';
+  const r = Math.round(v*10)/10;
+  vl.textContent = (r>0?'+':'')+r;
+}
+
+function setEqFromPointer(slot, i, clientY){
+  const rect = slot.getBoundingClientRect();
+  let y = clientY - rect.top;
+  y = Math.max(EQ_TOP, Math.min(EQ_BOT, y));   // clamp to travel
+  let v = eqYToVal(y);
+  v = Math.round(v/0.25)*0.25;                 // snap to 0.25 dB
+  v = Math.max(-18, Math.min(18, v));
+  eqGains[i] = v;
+  renderEq(slot, i);
+  liveUpdate();
+}
+
 for(let i=0;i<5;i++){
-  const sl=document.getElementById('eq'+i), vl=document.getElementById('eq'+i+'v');
-  if(sl) sl.addEventListener('input',()=>{
-    eqGains[i]=+sl.value;
-    vl.textContent=(eqGains[i]>0?'+':'')+eqGains[i];
-    liveUpdate();
-  });
+  const slot=document.getElementById('eq'+i);
+  if(!slot) continue;
+  let dragging=false;
+  const down=e=>{ dragging=true; slot.setPointerCapture(e.pointerId);
+                  setEqFromPointer(slot,i,e.clientY); e.preventDefault(); };
+  const move=e=>{ if(dragging) setEqFromPointer(slot,i,e.clientY); };
+  const up=e=>{ dragging=false; try{slot.releasePointerCapture(e.pointerId);}catch(_){} };
+  slot.addEventListener('pointerdown',down);
+  slot.addEventListener('pointermove',move);
+  slot.addEventListener('pointerup',up);
+  slot.addEventListener('pointercancel',up);
+  slot.addEventListener('dblclick',()=>{ eqGains[i]=0; renderEq(slot,i); liveUpdate(); });
+  renderEq(slot,i); // initial
 }
 // crowd boost — live on the constant bed; rebuild on release so regions update too
 els.crowdBoost.addEventListener('input',()=>{
